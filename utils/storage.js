@@ -1,41 +1,22 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export type RouteStop = {
-  Lat: string;
-  Lon: string;
-  LocationName: string;
-};
-
-export type Route = {
-  Id: string;
-  Name: string;
-  Stops: RouteStop[];
-  DepartureTime: string;
-  ArrivalTime: string;
-  createdAt: string;
-};
-
 const STORAGE_KEY = "SAVED_ROUTES";
 
 // Save new route
-export async function saveRoute(
-  name: string,
-  stops: RouteStop[],
-  departureTime: string,
-  arrivalTime: string
-) {
+export async function saveRoute(upRouteName, downRouteName, src, dest, stops) {
   try {
-    const newRoute: Route = {
+    const newRoute = {
       Id: Date.now().toString(),
-      Name: name,
-      Stops: stops,
-      DepartureTime: departureTime,
-      ArrivalTime: arrivalTime,
+      up_route_name: upRouteName,
+      down_route_name: downRouteName,
+      src: src,
+      dest: dest,
+      stops: stops,
       createdAt: new Date().toISOString(),
     };
 
     const existing = await AsyncStorage.getItem(STORAGE_KEY);
-    const routes: Route[] = existing ? JSON.parse(existing) : [];
+    const routes = existing ? JSON.parse(existing) : [];
 
     routes.push(newRoute);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(routes));
@@ -45,8 +26,8 @@ export async function saveRoute(
   }
 }
 
-// ✅ getSavedRoutes (alias of getRoutes)
-export async function getSavedRoutes(): Promise<Route[]> {
+// Get saved routes
+export async function getSavedRoutes() {
   try {
     const existing = await AsyncStorage.getItem(STORAGE_KEY);
     return existing ? JSON.parse(existing) : [];
@@ -56,12 +37,12 @@ export async function getSavedRoutes(): Promise<Route[]> {
   }
 }
 
-// ✅ deleteRoute by ID
-export async function deleteRoute(id: string) {
+// Delete route by ID
+export async function deleteRoute(id) {
   try {
     const existing = await AsyncStorage.getItem(STORAGE_KEY);
     if (!existing) return;
-    let routes: Route[] = JSON.parse(existing);
+    let routes = JSON.parse(existing);
 
     routes = routes.filter((r) => r.Id !== id);
 
@@ -71,7 +52,7 @@ export async function deleteRoute(id: string) {
   }
 }
 
-// ✅ clearAllRoutes (alias of clearRoutes)
+// Clear all routes
 export async function clearAllRoutes() {
   try {
     await AsyncStorage.removeItem(STORAGE_KEY);

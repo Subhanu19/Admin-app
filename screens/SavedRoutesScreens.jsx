@@ -8,17 +8,13 @@ import {
   Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../types/navigation";
-import { Route, getSavedRoutes, clearAllRoutes, deleteRoute } from "../utils/storage";
+import { getSavedRoutes, clearAllRoutes, deleteRoute } from "../utils/storage";
 import Colours from "../constants/Colours";
 import RouteCard from "../components/RouteCard";
 
-type SavedRoutesNavProp = NativeStackNavigationProp<RootStackParamList, "SavedRoutes">;
-
 export default function SavedRoutesScreen() {
-  const navigation = useNavigation<SavedRoutesNavProp>();
-  const [routes, setRoutes] = useState<Route[]>([]);
+  const navigation = useNavigation();
+  const [routes, setRoutes] = useState([]);
 
   useEffect(() => {
     loadRoutes();
@@ -42,12 +38,12 @@ export default function SavedRoutesScreen() {
     ]);
   };
 
-  const handleDeleteRoute = async (id: string) => {
+  const handleDeleteRoute = async (id) => {
     await deleteRoute(id);
     loadRoutes();
   };
 
-  const renderRoute = ({ item }: { item: Route }) => (
+  const renderRoute = ({ item }) => (
     <View style={styles.routeWrapper}>
       <RouteCard route={item} />
       {/* Delete single route button */}

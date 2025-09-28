@@ -1,14 +1,9 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import { Route } from "../utils/storage";
 import Colours from "../constants/Colours";
 
-type Props = {
-  route: Route;
-};
-
-export default function RouteCard({ route }: Props) {
+export default function RouteCard({ route }) {
   if (!route.Stops || route.Stops.length === 0) {
     return (
       <View style={styles.card}>
