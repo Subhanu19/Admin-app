@@ -206,7 +206,8 @@ export default function MapScreen({ setIsAuthenticated }) {
       setDownDepartureTime("");
       setBusPosition(null);
       
-      navigation.navigate("SavedRoutes");
+      // REMOVED: navigation.navigate("SavedRoutes");
+      
     } catch (error) {
       console.error("Error saving route:", error);
       Alert.alert(
@@ -380,7 +381,7 @@ export default function MapScreen({ setIsAuthenticated }) {
             <Text style={styles.headerTitle}>Create Route</Text>
           </View>
 
-          {/* All Four Buttons in Horizontal Layout - NO CHANGES */}
+          {/* All Four Buttons in Horizontal Layout */}
           <View style={styles.buttonsContainer}>
             <TouchableOpacity 
               style={styles.buttonWrapper} 
@@ -803,4 +804,4 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 8,
   },
-}); 
+});
