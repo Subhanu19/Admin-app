@@ -2,16 +2,17 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const STORAGE_KEY = "SAVED_ROUTES";
 
-// Save new route
-export async function saveRoute(upRouteName, downRouteName, src, dest, stops) {
+// Save new route - updated to match new format
+export async function saveRoute(routeData) {
   try {
     const newRoute = {
       Id: Date.now().toString(),
-      up_route_name: upRouteName,
-      down_route_name: downRouteName,
-      src: src,
-      dest: dest,
-      stops: stops,
+      up_route_name: routeData.up_route_name,
+      down_route_name: routeData.down_route_name,
+      src: routeData.src,
+      dest: routeData.dest,
+      stops: routeData.stops,
+      down_departure_time: routeData.down_departure_time || null,
       createdAt: new Date().toISOString(),
     };
 
@@ -23,6 +24,7 @@ export async function saveRoute(upRouteName, downRouteName, src, dest, stops) {
     return newRoute;
   } catch (e) {
     console.error("Error saving route:", e);
+    throw e;
   }
 }
 
@@ -49,6 +51,7 @@ export async function deleteRoute(id) {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(routes));
   } catch (e) {
     console.error("Error deleting route:", e);
+    throw e;
   }
 }
 
@@ -58,5 +61,6 @@ export async function clearAllRoutes() {
     await AsyncStorage.removeItem(STORAGE_KEY);
   } catch (e) {
     console.error("Error clearing routes:", e);
+    throw e;
   }
 }

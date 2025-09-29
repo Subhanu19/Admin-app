@@ -8,237 +8,151 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Animated,
-  Easing,
+  ScrollView,
+  Image,
   Dimensions,
 } from "react-native";
-import Colours from "../constants/Colours";
+import { Ionicons } from "@expo/vector-icons";
 
-const { width, height } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+// Custom color theme with black background (same as MapScreen)
+const CustomColours = {
+  primary: "#e8c513e7",
+  secondary: "rgba(11, 8, 8, 1)",
+  accent: "#ff6b35",
+  danger: "#dc2626",
+  warning: "#f59e0b",
+  success: "#10b981",
+  textDark: "#ffffff",
+  textSecondary: "#a0a0a0",
+  background: "#000000",
+  card: "#1a1a1a",
+  border: "#333333"
+};
 
 export default function LoginScreen({ setIsAuthenticated }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [slideAnim] = useState(new Animated.Value(50));
-  const [rotateAnim] = useState(new Animated.Value(0));
-  const [scaleAnim] = useState(new Animated.Value(0.8));
 
-  React.useEffect(() => {
-    // Complex animations on component mount
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 1000,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(rotateAnim, {
-        toValue: 1,
-        duration: 1500,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
       Alert.alert("Error", "Please enter both username and password");
       return;
     }
 
     setIsLoading(true);
-    
-    // Simulate API call
+
+    // Simulate login process
     setTimeout(() => {
-      if (username === "admin" && password === "admin123") {
+      if (username === "admin" && password === "password") {
         setIsAuthenticated(true);
+        Alert.alert("Success", "Login successful!");
       } else {
-        Alert.alert("Authentication Failed", "Invalid username or password. Please try again.");
+        Alert.alert("Error", "Invalid credentials. Use admin/password");
       }
       setIsLoading(false);
     }, 1500);
   };
-
-  const rotateInterpolate = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
 
   return (
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {/* Animated Background Elements */}
-      <View style={styles.background}>
-        <View style={[styles.circle, styles.circle1]} />
-        <View style={[styles.circle, styles.circle2]} />
-        <View style={[styles.circle, styles.circle3]} />
-        <Animated.View 
-          style={[
-            styles.circle, 
-            styles.circle4,
-            {
-              transform: [
-                { rotate: rotateInterpolate },
-                { scale: scaleAnim }
-              ]
-            }
-          ]} 
-        />
-      </View>
-
-      <Animated.View 
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }]
-          }
-        ]}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Floating Header Section */}
-        <Animated.View 
-          style={[
-            styles.header,
-            {
-              transform: [{ scale: scaleAnim }]
-            }
-          ]}
-        >
+        {/* Header Section */}
+        <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <Animated.Text 
-              style={[
-                styles.logo,
-                {
-                  transform: [{ rotate: rotateInterpolate }]
-                }
-              ]}
+            <View style={styles.logo}>
+              <Text style={styles.logoIcon}>🚌</Text>
+            </View>
+          </View>
+          <Text style={styles.title}>Bus Route Manager</Text>
+          <Text style={styles.subtitle}>Admin Dashboard</Text>
+        </View>
+
+        {/* Login Form */}
+        <View style={styles.formContainer}>
+          <Text style={styles.formTitle}>Admin Login</Text>
+          
+          {/* Username Input */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="person-outline" size={20} color={CustomColours.textSecondary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Username"
+              placeholderTextColor={CustomColours.textSecondary}
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          {/* Password Input */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="lock-closed-outline" size={20} color={CustomColours.textSecondary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor={CustomColours.textSecondary}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+            />
+            <TouchableOpacity 
+              style={styles.eyeIcon}
+              onPress={() => setShowPassword(!showPassword)}
             >
-              🚌
-            </Animated.Text>
-          </View>
-          <Text style={styles.title}>RouteMaster</Text>
-          <Text style={styles.subtitle}>Navigate Your World</Text>
-        </Animated.View>
-
-        {/* Glass Morphism Form */}
-        <Animated.View 
-          style={[
-            styles.formContainer,
-            {
-              transform: [{ scale: scaleAnim }]
-            }
-          ]}
-        >
-          <View style={styles.formHeader}>
-            <Text style={styles.formTitle}>Access Portal</Text>
-            <View style={styles.formIndicator}>
-              <View style={styles.indicatorDot} />
-              <View style={[styles.indicatorDot, styles.indicatorDotActive]} />
-              <View style={styles.indicatorDot} />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <View style={styles.inputWrapper}>
-              <View style={styles.inputIcon}>
-                <Text style={styles.icon}>👤</Text>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Username"
-                placeholderTextColor="rgba(255,255,255,0.7)"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
+              <Ionicons 
+                name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                size={20} 
+                color={CustomColours.textSecondary} 
               />
-            </View>
-
-            <View style={styles.inputWrapper}>
-              <View style={styles.inputIcon}>
-                <Text style={styles.icon}>🔒</Text>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor="rgba(255,255,255,0.7)"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-            </View>
+            </TouchableOpacity>
           </View>
 
+          {/* Login Button */}
           <TouchableOpacity 
             style={[
               styles.loginButton,
               isLoading && styles.loginButtonDisabled
-            ]} 
+            ]}
             onPress={handleLogin}
             disabled={isLoading}
           >
-            <Animated.View 
-              style={[
-                styles.buttonContent,
-                {
-                  transform: [{ scale: isLoading ? 0.95 : 1 }]
-                }
-              ]}
-            >
-              <Text style={styles.loginButtonText}>
-                {isLoading ? "Authenticating..." : "Unlock Dashboard"}
-              </Text>
-              {isLoading && (
-                <View style={styles.loadingSpinner}>
-                  <View style={styles.spinnerDot} />
-                  <View style={styles.spinnerDot} />
-                  <View style={styles.spinnerDot} />
-                </View>
+            <View style={styles.buttonContent}>
+              {isLoading ? (
+                <Ionicons name="refresh" size={20} color="#ffffff" style={styles.loadingIcon} />
+              ) : (
+                <Ionicons name="log-in-outline" size={20} color="#ffffff" style={styles.buttonIcon} />
               )}
-            </Animated.View>
+              <Text style={styles.loginButtonText}>
+                {isLoading ? "Signing In..." : "Sign In"}
+              </Text>
+            </View>
           </TouchableOpacity>
 
-          {/* Security Badge */}
-          <View style={styles.securityBadge}>
-            <Text style={styles.securityIcon}>🛡️</Text>
-            <Text style={styles.securityText}>Enterprise Secure Login</Text>
+          {/* Demo Credentials */}
+          <View style={styles.demoContainer}>
+            <Text style={styles.demoTitle}>Demo Credentials:</Text>
+            <Text style={styles.demoText}>Username: admin</Text>
+            <Text style={styles.demoText}>Password: password</Text>
           </View>
-        </Animated.View>
+        </View>
 
-        {/* Animated Footer */}
-        <Animated.View 
-          style={[
-            styles.footer,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          <Text style={styles.footerText}>Route Management System v2.0</Text>
-          <Text style={styles.footerSubtext}>Powered by Advanced GPS Technology</Text>
-        </Animated.View>
-      </Animated.View>
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Bus Management System v1.0</Text>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -246,232 +160,158 @@ export default function LoginScreen({ setIsAuthenticated }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0f2d',
+    backgroundColor: CustomColours.background,
   },
-  background: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  circle: {
-    position: 'absolute',
-    borderRadius: 500,
-    opacity: 0.1,
-  },
-  circle1: {
-    width: 300,
-    height: 300,
-    backgroundColor: '#6366f1',
-    top: -100,
-    left: -100,
-  },
-  circle2: {
-    width: 200,
-    height: 200,
-    backgroundColor: '#10b981',
-    bottom: -50,
-    right: -50,
-  },
-  circle3: {
-    width: 150,
-    height: 150,
-    backgroundColor: '#f59e0b',
-    top: '40%',
-    left: '60%',
-  },
-  circle4: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#ef4444',
-    bottom: '30%',
-    left: '20%',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 30,
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 40,
   },
   header: {
-    alignItems: 'center',
-    marginBottom: 40,
+    alignItems: "center",
+    marginBottom: 50,
   },
   logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(99, 102, 241, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 20,
-    borderWidth: 2,
-    borderColor: 'rgba(99, 102, 241, 0.4)',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 0 },
+  },
+  logo: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: CustomColours.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: CustomColours.primary,
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
     shadowOpacity: 0.5,
     shadowRadius: 20,
     elevation: 10,
   },
-  logo: {
-    fontSize: 48,
-    color: '#ffffff',
+  logoIcon: {
+    fontSize: 40,
   },
   title: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    textAlign: 'center',
+    fontSize: 28,
+    fontWeight: "bold",
+    color: CustomColours.textDark,
+    textAlign: "center",
     marginBottom: 8,
-    letterSpacing: 1,
-    textShadowColor: 'rgba(99, 102, 241, 0.5)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
   },
   subtitle: {
     fontSize: 16,
-    color: '#cbd5e1',
-    textAlign: 'center',
-    letterSpacing: 2,
-    fontWeight: '300',
+    color: CustomColours.textSecondary,
+    textAlign: "center",
   },
   formContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 25,
-    padding: 30,
+    backgroundColor: CustomColours.card,
+    padding: 24,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    backdropFilter: 'blur(10px)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
+    borderColor: CustomColours.border,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
     shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
-  },
-  formHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 30,
+    shadowRadius: 8,
+    elevation: 8,
   },
   formTitle: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 0.5,
-  },
-  formIndicator: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  indicatorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  indicatorDotActive: {
-    backgroundColor: '#6366f1',
-  },
-  inputGroup: {
-    gap: 20,
+    fontWeight: "bold",
+    color: CustomColours.textDark,
+    textAlign: "center",
     marginBottom: 30,
   },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 15,
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2a2a2a",
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    overflow: 'hidden',
+    borderColor: CustomColours.border,
+    borderRadius: 12,
+    marginBottom: 20,
+    paddingHorizontal: 16,
   },
   inputIcon: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  icon: {
-    fontSize: 18,
-    color: 'rgba(255, 255, 255, 0.7)',
+    marginRight: 12,
   },
   input: {
     flex: 1,
     paddingVertical: 16,
-    paddingRight: 20,
+    color: CustomColours.textDark,
     fontSize: 16,
-    color: '#ffffff',
-    fontWeight: '500',
+    fontWeight: "500",
+  },
+  eyeIcon: {
+    padding: 4,
   },
   loginButton: {
-    backgroundColor: 'rgba(99, 102, 241, 0.8)',
-    borderRadius: 15,
-    padding: 18,
+    backgroundColor: CustomColours.primary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    marginTop: 10,
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(99, 102, 241, 0.5)',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowColor: CustomColours.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
   },
   loginButtonDisabled: {
-    backgroundColor: 'rgba(148, 163, 184, 0.6)',
+    opacity: 0.7,
   },
   buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  loginButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
-  },
-  loadingSpinner: {
-    flexDirection: 'row',
-    marginLeft: 10,
-    gap: 3,
-  },
-  spinnerDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'white',
-  },
-  securityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.3)',
-  },
-  securityIcon: {
-    fontSize: 14,
+  buttonIcon: {
     marginRight: 8,
   },
-  securityText: {
+  loadingIcon: {
+    marginRight: 8,
+  },
+  loginButtonText: {
+    color: "#000000",
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  demoContainer: {
+    backgroundColor: "#2a2a2a",
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: CustomColours.border,
+  },
+  demoTitle: {
+    color: CustomColours.textDark,
+    fontWeight: "bold",
+    marginBottom: 8,
+    fontSize: 14,
+  },
+  demoText: {
+    color: CustomColours.textSecondary,
     fontSize: 12,
-    color: '#22c55e',
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    marginBottom: 2,
+    fontFamily: 'monospace',
   },
   footer: {
     marginTop: 40,
-    alignItems: 'center',
+    alignItems: "center",
   },
   footerText: {
+    color: CustomColours.textSecondary,
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.6)',
-    textAlign: 'center',
-    marginBottom: 4,
-    letterSpacing: 0.5,
-  },
-  footerSubtext: {
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.4)',
-    textAlign: 'center',
-    fontStyle: 'italic',
+    textAlign: "center",
   },
 });
