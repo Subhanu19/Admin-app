@@ -19,7 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-export default function MapScreen() {
+export default function MapScreen({ setIsAuthenticated }) {
   const navigation = useNavigation();
   const [stops, setStops] = useState([]);
   const [upRouteName, setUpRouteName] = useState("");
@@ -32,6 +32,22 @@ export default function MapScreen() {
 
   const sheetRef = useRef(null);
   const snapPoints = useMemo(() => ["25%", "50%", "90%"], []);
+
+  // Logout function
+  const handleLogout = () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Logout", 
+          style: "destructive",
+          onPress: () => setIsAuthenticated(false)
+        }
+      ]
+    );
+  };
 
   const handleMapPress = (e) => {
     // Don't add stops when sheet is fully expanded
@@ -277,6 +293,14 @@ export default function MapScreen() {
           </Marker>
         )}
       </MapView>
+
+      {/* Logout Button */}
+      <TouchableOpacity 
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
+        <Ionicons name="log-out-outline" size={24} color="white" />
+      </TouchableOpacity>
 
       {/* BottomSheet */}
       <BottomSheet
@@ -626,6 +650,27 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 20,
     padding: 4,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  // Logout button styles
+  logoutButton: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    backgroundColor: "#dc2626",
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,

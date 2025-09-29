@@ -1,15 +1,22 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import MapScreen from "../screens/MapScreen";
-import SavedRoutesScreen from "../screens/SavedRoutesScreens";
+import LoginScreen from "../screens/LoginScreen"; // Make sure this path is correct
 
 const Stack = createNativeStackNavigator();
 
-export default function AppNavigator() {
+export default function AppNavigator({ isAuthenticated, setIsAuthenticated }) {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="Map" component={MapScreen} />
-      <Stack.Screen name="SavedRoutes" component={SavedRoutesScreen} />
+      {isAuthenticated ? (
+        <Stack.Screen name="Map" options={{ headerShown: false }}>
+          {(props) => <MapScreen {...props} setIsAuthenticated={setIsAuthenticated} />}
+        </Stack.Screen>
+      ) : (
+        <Stack.Screen name="Login" options={{ headerShown: false }}>
+          {(props) => <LoginScreen {...props} setIsAuthenticated={setIsAuthenticated} />}
+        </Stack.Screen>
+      )}
     </Stack.Navigator>
   );
 }
