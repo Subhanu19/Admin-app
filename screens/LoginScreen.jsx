@@ -5,12 +5,11 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
   Dimensions,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -31,30 +30,144 @@ const CustomColours = {
   border: "#333333"
 };
 
+// Email validation regex
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+// Helper function to convert object to URL-encoded form data
+const formUrlEncode = (data) => {
+  return Object.keys(data)
+    .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(data[key]))
+    .join('&');
+};
+
 export default function LoginScreen({ setIsAuthenticated }) {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // Changed to false by default
   const [isLoading, setIsLoading] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  
+  // Animation for password shake effect
+  const shakeAnimation = useState(new Animated.Value(0))[0];
+
+  const validateEmail = (email) => {
+    if (!email.trim()) {
+      setEmailError("Email is required");
+      return false;
+    }
+    
+    if (!EMAIL_REGEX.test(email)) {
+      setEmailError("Please enter a valid email address");
+      return false;
+    }
+    
+    setEmailError("");
+    return true;
+  };
+
+  // Shake animation function for wrong password
+  const shakePasswordField = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnimation, {
+        toValue: 10,
+        duration: 50,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeAnimation, {
+        toValue: -10,
+        duration: 50,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeAnimation, {
+        toValue: 10,
+        duration: 50,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeAnimation, {
+        toValue: 0,
+        duration: 50,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
 
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      Alert.alert("Error", "Please enter both username and password");
+    // Validate email format
+    if (!validateEmail(email)) {
+      return;
+    }
+
+    if (!password.trim()) {
+      setPasswordError("Password is required");
       return;
     }
 
     setIsLoading(true);
+    setPasswordError(""); // Clear previous password error
 
-    // Simulate login process
-    setTimeout(() => {
-      if (username === "admin" && password === "password") {
-        setIsAuthenticated(true);
-        Alert.alert("Success", "Login successful!");
+    try {
+      // Prepare form data
+      const formData = formUrlEncode({
+        email: email.trim(),
+        password: password
+      });
+
+      // API call to backend with www-form-urlencoded
+      const response = await fetch('https://yus.kwscloud.in/yus/admin-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        if (data.login_status === "valid") {
+          // Success - automatically navigate without alert
+          setIsAuthenticated(true);
+        } else {
+          // Wrong password - shake animation and show error
+          shakePasswordField();
+          setPasswordError("Invalid email or password");
+        }
       } else {
-        Alert.alert("Error", "Invalid credentials. Use admin/password");
+        shakePasswordField();
+        setPasswordError("Login failed. Please try again.");
       }
+    } catch (error) {
+      console.error('Login error:', error);
+      shakePasswordField();
+      setPasswordError("Network error. Please check your connection.");
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
+  };
+
+  const handleEmailChange = (text) => {
+    setEmail(text);
+    // Clear error when user starts typing
+    if (emailError) {
+      setEmailError("");
+    }
+  };
+
+  const handlePasswordChange = (text) => {
+    setPassword(text);
+    // Clear error when user starts typing
+    if (passwordError) {
+      setPasswordError("");
+    }
+  };
+
+  const handleEmailBlur = () => {
+    validateEmail(email);
+  };
+
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
   };
 
   return (
@@ -81,42 +194,65 @@ export default function LoginScreen({ setIsAuthenticated }) {
         <View style={styles.formContainer}>
           <Text style={styles.formTitle}>Admin Login</Text>
           
-          {/* Username Input */}
-          <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={20} color={CustomColours.textSecondary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Username"
-              placeholderTextColor={CustomColours.textSecondary}
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+          {/* Email Input */}
+          <View style={styles.inputSection}>
+            <View style={[
+              styles.inputContainer,
+              emailError && styles.inputContainerError
+            ]}>
+              <Ionicons name="mail-outline" size={20} color={CustomColours.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor={CustomColours.textSecondary}
+                value={email}
+                onChangeText={handleEmailChange}
+                onBlur={handleEmailBlur}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                autoComplete="email"
+              />
+            </View>
+            {emailError ? (
+              <Text style={styles.errorText}>{emailError}</Text>
+            ) : null}
           </View>
 
-          {/* Password Input */}
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={CustomColours.textSecondary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor={CustomColours.textSecondary}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity 
-              style={styles.eyeIcon}
-              onPress={() => setShowPassword(!showPassword)}
+          {/* Password Input with Shake Animation */}
+          <View style={styles.inputSection}>
+            <Animated.View 
+              style={[
+                styles.inputContainer,
+                passwordError && styles.inputContainerError,
+                { transform: [{ translateX: shakeAnimation }] }
+              ]}
             >
-              <Ionicons 
-                name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                size={20} 
-                color={CustomColours.textSecondary} 
+              <Ionicons name="lock-closed-outline" size={20} color={CustomColours.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor={CustomColours.textSecondary}
+                value={password}
+                onChangeText={handlePasswordChange}
+                secureTextEntry={!showPassword} // This will be true by default (password hidden)
+                autoCapitalize="none"
+                autoComplete="password"
               />
-            </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.eyeIcon}
+                onPress={togglePasswordVisibility}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-outline" : "eye-off-outline"} // Swapped the icons
+                  size={20} 
+                  color={CustomColours.textSecondary} 
+                />
+              </TouchableOpacity>
+            </Animated.View>
+            {passwordError ? (
+              <Text style={styles.errorText}>{passwordError}</Text>
+            ) : null}
           </View>
 
           {/* Login Button */}
@@ -130,22 +266,15 @@ export default function LoginScreen({ setIsAuthenticated }) {
           >
             <View style={styles.buttonContent}>
               {isLoading ? (
-                <Ionicons name="refresh" size={20} color="#ffffff" style={styles.loadingIcon} />
+                <Ionicons name="refresh" size={20} color="#000000" style={styles.loadingIcon} />
               ) : (
-                <Ionicons name="log-in-outline" size={20} color="#ffffff" style={styles.buttonIcon} />
+                <Ionicons name="log-in-outline" size={20} color="#000000" style={styles.buttonIcon} />
               )}
               <Text style={styles.loginButtonText}>
                 {isLoading ? "Signing In..." : "Sign In"}
               </Text>
             </View>
           </TouchableOpacity>
-
-          {/* Demo Credentials */}
-          <View style={styles.demoContainer}>
-            <Text style={styles.demoTitle}>Demo Credentials:</Text>
-            <Text style={styles.demoText}>Username: admin</Text>
-            <Text style={styles.demoText}>Password: password</Text>
-          </View>
         </View>
 
         {/* Footer */}
@@ -228,6 +357,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 30,
   },
+  inputSection: {
+    marginBottom: 20,
+  },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -235,8 +367,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: CustomColours.border,
     borderRadius: 12,
-    marginBottom: 20,
     paddingHorizontal: 16,
+  },
+  inputContainerError: {
+    borderColor: CustomColours.danger,
   },
   inputIcon: {
     marginRight: 12,
@@ -250,6 +384,12 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     padding: 4,
+  },
+  errorText: {
+    color: CustomColours.danger,
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 8,
   },
   loginButton: {
     backgroundColor: CustomColours.primary,
@@ -285,25 +425,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     textAlign: "center",
-  },
-  demoContainer: {
-    backgroundColor: "#2a2a2a",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: CustomColours.border,
-  },
-  demoTitle: {
-    color: CustomColours.textDark,
-    fontWeight: "bold",
-    marginBottom: 8,
-    fontSize: 14,
-  },
-  demoText: {
-    color: CustomColours.textSecondary,
-    fontSize: 12,
-    marginBottom: 2,
-    fontFamily: 'monospace',
   },
   footer: {
     marginTop: 40,
