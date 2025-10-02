@@ -22,7 +22,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // Custom color theme with black background
 const CustomColours = {
-  primary: "#e8c513e7",
+  primary: "#FFD700", // Changed to #FFD700 (gold/yellow)
   secondary: "rgba(11, 8, 8, 1)",
   accent: "#ff6b35",
   danger: "#dc2626",
@@ -75,12 +75,18 @@ export default function MapScreen({ setIsAuthenticated }) {
       Alert.alert("Error", "Please enter a stop name first.");
       return;
     }
+
+    if (!arrivalTime.trim()) {
+      Alert.alert("Error", "Please enter arrival time for this stop.");
+      return;
+    }
+
     const newStop = {
       location_name: stopName.trim(),
       lat: e.nativeEvent.coordinate.latitude.toString(),
       lon: e.nativeEvent.coordinate.longitude.toString(),
       is_stop: true, // Default to true for bus stops
-      arrival_time: arrivalTime.trim() || null,
+      arrival_time: arrivalTime.trim(),
     };
     setStops([...stops, newStop]);
     setStopName("");
@@ -101,12 +107,17 @@ export default function MapScreen({ setIsAuthenticated }) {
       return;
     }
 
+    if (!arrivalTime.trim()) {
+      Alert.alert("Error", "Please enter arrival time for this stop.");
+      return;
+    }
+
     const newStop = {
       location_name: stopName.trim(),
       lat: loc.coords.latitude.toString(),
       lon: loc.coords.longitude.toString(),
       is_stop: true,
-      arrival_time: arrivalTime.trim() || null,
+      arrival_time: arrivalTime.trim(),
     };
     setStops([...stops, newStop]);
     setStopName("");
@@ -170,6 +181,19 @@ export default function MapScreen({ setIsAuthenticated }) {
       return;
     }
 
+    // Check if all stops have arrival time
+    const stopsWithoutArrivalTime = stops.filter(stop => !stop.arrival_time);
+    if (stopsWithoutArrivalTime.length > 0) {
+      Alert.alert("Error", "All stops must have arrival time.");
+      return;
+    }
+
+    // Check if departure time is provided
+    if (!downDepartureTime.trim()) {
+      Alert.alert("Error", "Please enter down departure time.");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -184,9 +208,9 @@ export default function MapScreen({ setIsAuthenticated }) {
           lat: stop.lat,
           lon: stop.lon,
           is_stop: stop.is_stop,
-          arrival_time: stop.arrival_time || null
+          arrival_time: stop.arrival_time
         })),
-        down_departure_time: downDepartureTime.trim() || null
+        down_departure_time: downDepartureTime.trim()
       };
 
       // Save to local storage
@@ -313,7 +337,7 @@ export default function MapScreen({ setIsAuthenticated }) {
               longitude: parseFloat(stop.lon) 
             }}
             title={`${idx + 1}. ${stop.location_name}`}
-            description={stop.is_stop ? "Bus Stop" : "Passing Point"}
+            description={stop.is_stop ? `Bus Stop - Arrival: ${stop.arrival_time}` : `Passing Point - Arrival: ${stop.arrival_time}`}
             pinColor={stop.is_stop ? CustomColours.primary : CustomColours.secondary}
           />
         ))}
@@ -458,7 +482,7 @@ export default function MapScreen({ setIsAuthenticated }) {
             
             <TextInput 
               style={styles.input} 
-              placeholder="Stop Name" 
+              placeholder="Stop Name *" 
               value={stopName} 
               onChangeText={setStopName} 
               placeholderTextColor={CustomColours.textSecondary}
@@ -467,7 +491,7 @@ export default function MapScreen({ setIsAuthenticated }) {
             
             <TextInput 
               style={styles.input} 
-              placeholder="Arrival Time (e.g., 08:30)" 
+              placeholder="Arrival Time * (e.g., 08:30)" 
               value={arrivalTime} 
               onChangeText={setArrivalTime} 
               placeholderTextColor={CustomColours.textSecondary}
@@ -476,7 +500,7 @@ export default function MapScreen({ setIsAuthenticated }) {
 
             <TextInput 
               style={styles.input} 
-              placeholder="Down Departure Time (e.g., 16:40)" 
+              placeholder="Down Departure Time * (e.g., 16:40)" 
               value={downDepartureTime} 
               onChangeText={setDownDepartureTime} 
               placeholderTextColor={CustomColours.textSecondary}
@@ -484,7 +508,7 @@ export default function MapScreen({ setIsAuthenticated }) {
             />
 
             <Text style={styles.instructionText}>
-              👉 Tap on the map to add stops
+              👉 Tap on the map to add stops (Arrival Time is required)
             </Text>
           </View>
 
@@ -525,11 +549,9 @@ export default function MapScreen({ setIsAuthenticated }) {
                       <Text style={styles.stopCoordinates}>
                         {parseFloat(stop.lat).toFixed(4)}, {parseFloat(stop.lon).toFixed(4)}
                       </Text>
-                      {stop.arrival_time && (
-                        <Text style={styles.arrivalTime}>
-                          🕒 {stop.arrival_time}
-                        </Text>
-                      )}
+                      <Text style={styles.arrivalTime}>
+                        🕒 Arrival: {stop.arrival_time}
+                      </Text>
                     </View>
                   </View>
                   <TouchableOpacity 
@@ -690,7 +712,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stopNumber: {
-    backgroundColor: "#e8c513e7",
+    backgroundColor: "#f9f978ff", // Changed to #FFD700
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -707,7 +729,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   stopNumberText: {
-    color: "white",
+    color: "black", // Changed to black for better contrast with yellow
     fontWeight: "bold",
     fontSize: 12,
   },
@@ -743,7 +765,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   stopTypeActive: {
-    backgroundColor: "#e8c513e7",
+    backgroundColor:"#f9f978ff", // Changed to #FFD700
   },
   stopTypeInactive: {
     backgroundColor: "rgba(11, 8, 8, 1)",
@@ -761,7 +783,7 @@ const styles = StyleSheet.create({
   },
   arrivalTime: {
     fontSize: 11,
-    color: "#ff6b35",
+    color: "#f9f978ff", // Changed to #FFD700
     fontWeight: "600",
   },
   deleteButton: {
@@ -781,7 +803,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 8,
     borderWidth: 2,
-    borderColor: "#e8c513e7",
+    borderColor: "#f9f978ff", // Changed to #FFD700
   },
   // Logout button styles
   logoutButton: {

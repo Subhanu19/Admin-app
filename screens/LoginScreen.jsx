@@ -17,7 +17,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // Custom color theme with black background (same as MapScreen)
 const CustomColours = {
-  primary: "#e8c513e7",
+  primary: "#f9f978ff",
   secondary: "rgba(11, 8, 8, 1)",
   accent: "#ff6b35",
   danger: "#dc2626",
