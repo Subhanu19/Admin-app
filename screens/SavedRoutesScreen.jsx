@@ -8,15 +8,17 @@ import {
   Alert,
   Dimensions,
   useColorScheme,
+  ActivityIndicator
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { getSavedRoutes, deleteRoute, clearAllRoutes } from "../utils/storage";
+import { send_route_to_server } from "../utils/Api"; // Import your API function
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-// Color themes
+// Color themes (keep your existing color definitions)
 const LightColours = {
   primary: "#FFD700",
   secondary: "rgba(11, 8, 8, 1)",
@@ -51,6 +53,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
   
   const colours = isDarkMode ? DarkColours : LightColours;
   const [savedRoutes, setSavedRoutes] = useState([]);
+  const [loadingRoutes, setLoadingRoutes] = useState({}); // Track loading state for each route
 
   useEffect(() => {
     if (isFocused) {
@@ -68,6 +71,150 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
     }
   };
 
+  // New function to handle saving route to server
+  const handleSaveToServer = async (route) => {
+    try {
+      setLoadingRoutes(prev => ({ ...prev, [route.id]: true }));
+      
+      console.log('Saving route to server:', route);
+      
+      // Prepare the route data in the format expected by your API
+      const routeData = {
+        up_route_name: route.up_route_name,
+        down_route_name: route.down_route_name,
+        src: route.src,
+        dest: route.dest,
+        up_departure_time: route.up_departure_time,
+        down_departure_time: route.down_departure_time,
+        stops: route.stops.map(stop => ({
+          lat: stop.lat,
+          lon: stop.lon,
+          location_name: stop.location_name,
+          is_stop: stop.is_stop || false
+        }))
+      };
+
+      const result = await send_route_to_server(routeData);
+      
+      Alert.alert("Success", "Route saved to server successfully!");
+      console.log('Server response:', result);
+      
+    } catch (error) {
+      console.error('Error saving route to server:', error);
+      Alert.alert(
+        "Error", 
+        error.message || "Failed to save route to server. Please try again."
+      );
+    } finally {
+      setLoadingRoutes(prev => ({ ...prev, [route.id]: false }));
+    }
+  };
+
+  // Updated RouteCard component with Save button
+  const RouteCard = ({ route, index }) => {
+    const region = calculateRegion(route.stops);
+    const isLoading = loadingRoutes[route.id];
+    
+    return (
+      <View style={[styles.routeCard, { backgroundColor: colours.card, borderColor: colours.border }]}>
+        <View style={styles.mapContainer}>
+          <MapView
+            style={styles.miniMap}
+            region={region}
+            scrollEnabled={false}
+            zoomEnabled={false}
+            pitchEnabled={false}
+            rotateEnabled={false}
+          >
+            {route.stops.map((stop, idx) => (
+              <Marker
+                key={idx}
+                coordinate={{ 
+                  latitude: parseFloat(stop.lat), 
+                  longitude: parseFloat(stop.lon) 
+                }}
+                pinColor={stop.is_stop ? colours.primary : colours.secondary}
+              />
+            ))}
+            {route.stops.length > 1 && (
+              <Polyline
+                coordinates={route.stops.map(stop => ({
+                  latitude: parseFloat(stop.lat),
+                  longitude: parseFloat(stop.lon)
+                }))}
+                strokeColor={colours.primary}
+                strokeWidth={3}
+              />
+            )}
+          </MapView>
+        </View>
+
+        <View style={styles.routeInfo}>
+          <View style={styles.routeHeader}>
+            <View style={styles.routeNames}>
+              <Text style={[styles.routeName, { color: colours.textDark }]}>
+                {route.up_route_name}
+              </Text>
+              <Text style={[styles.routeDirection, { color: colours.textSecondary }]}>
+                ↑ {route.src} → {route.dest}
+              </Text>
+              <Text style={[styles.routeDirection, { color: colours.textSecondary }]}>
+                ↓ {route.dest} → {route.src}
+              </Text>
+            </View>
+            
+            <View style={styles.cardActions}>
+              {/* Save to Server Button */}
+              <TouchableOpacity 
+                style={[
+                  styles.saveButton, 
+                  { backgroundColor: colours.success },
+                  isLoading && styles.saveButtonDisabled
+                ]}
+                onPress={() => handleSaveToServer(route)}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Ionicons name="cloud-upload-outline" size={16} color="white" />
+                )}
+                <Text style={styles.saveButtonText}>
+                  {isLoading ? "Saving..." : "Save"}
+                </Text>
+              </TouchableOpacity>
+              
+              {/* Delete Button */}
+              <TouchableOpacity 
+                style={styles.deleteCardButton}
+                onPress={() => handleDeleteRoute(route.id)}
+              >
+                <Ionicons name="trash-outline" size={20} color={colours.danger} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.routeDetails}>
+            <View style={styles.detailItem}>
+              <Ionicons name="location-outline" size={14} color={colours.textSecondary} />
+              <Text style={[styles.detailText, { color: colours.textSecondary }]}>
+                {route.stops.length} stops
+              </Text>
+            </View>
+            
+            <View style={styles.detailItem}>
+              <Ionicons name="time-outline" size={14} color={colours.textSecondary} />
+              <Text style={[styles.detailText, { color: colours.textSecondary }]}>
+                Depart: {route.down_departure_time}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  // Keep your existing handleDeleteRoute, handleClearAllRoutes, calculateRegion functions
   const handleDeleteRoute = (routeId) => {
     Alert.alert(
       "Delete Route",
@@ -126,6 +273,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
   };
 
   const calculateRegion = (stops) => {
+    // ... keep your existing calculateRegion function
     if (!stops || stops.length === 0) {
       return {
         latitude: 9.917,
@@ -154,92 +302,13 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
     };
   };
 
-  const RouteCard = ({ route, index }) => {
-    const region = calculateRegion(route.stops);
-    
-    return (
-      <View style={[styles.routeCard, { backgroundColor: colours.card, borderColor: colours.border }]}>
-        <View style={styles.mapContainer}>
-          <MapView
-            style={styles.miniMap}
-            region={region}
-            scrollEnabled={false}
-            zoomEnabled={false}
-            pitchEnabled={false}
-            rotateEnabled={false}
-          >
-            {route.stops.map((stop, idx) => (
-              <Marker
-                key={idx}
-                coordinate={{ 
-                  latitude: parseFloat(stop.lat), 
-                  longitude: parseFloat(stop.lon) 
-                }}
-                pinColor={stop.is_stop ? colours.primary : colours.secondary}
-              />
-            ))}
-            {route.stops.length > 1 && (
-              <Polyline
-                coordinates={route.stops.map(stop => ({
-                  latitude: parseFloat(stop.lat),
-                  longitude: parseFloat(stop.lon)
-                }))}
-                strokeColor={colours.primary}
-                strokeWidth={3}
-              />
-            )}
-          </MapView>
-        </View>
-
-        <View style={styles.routeInfo}>
-          <View style={styles.routeHeader}>
-            <View style={styles.routeNames}>
-              <Text style={[styles.routeName, { color: colours.textDark }]}>
-                {route.up_route_name}
-              </Text>
-              <Text style={[styles.routeDirection, { color: colours.textSecondary }]}>
-                ↑ {route.src} → {route.dest}
-              </Text>
-              <Text style={[styles.routeDirection, { color: colours.textSecondary }]}>
-                ↓ {route.dest} → {route.src}
-              </Text>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.deleteCardButton}
-              onPress={() => handleDeleteRoute(route.id)}
-            >
-              <Ionicons name="trash-outline" size={20} color={colours.danger} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.routeDetails}>
-            <View style={styles.detailItem}>
-              <Ionicons name="location-outline" size={14} color={colours.textSecondary} />
-              <Text style={[styles.detailText, { color: colours.textSecondary }]}>
-                {route.stops.length} stops
-              </Text>
-            </View>
-            
-            <View style={styles.detailItem}>
-              <Ionicons name="time-outline" size={14} color={colours.textSecondary} />
-              <Text style={[styles.detailText, { color: colours.textSecondary }]}>
-                Depart: {route.down_departure_time}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: colours.background }]}>
-      {/* Fixed Header with proper alignment */}
+      {/* Header remains the same */}
       <View style={[styles.header, { 
         backgroundColor: colours.card, 
         borderBottomColor: colours.border,
-        paddingTop: 50, // Added padding to account for status bar
+        paddingTop: 50,
       }]}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -402,6 +471,28 @@ const styles = StyleSheet.create({
   routeDirection: {
     fontSize: 12,
     marginBottom: 2,
+  },
+  // New styles for card actions
+  cardActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  saveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 4,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
   },
   deleteCardButton: {
     padding: 4,

@@ -10,15 +10,17 @@ import {
   ScrollView,
   Dimensions,
   Animated,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { loginUser } from "../utils/Api";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-// Custom color theme with black background (same as MapScreen)
+// Professional color theme with refined gold and dark background
 const CustomColours = {
-  primary: "#f9f978ff",
-  secondary: "rgba(11, 8, 8, 1)",
+  primary: "#e8c513e7",   // Refined gold color
+  secondary: "rgba(11, 8, 8, 1)", // Dark background
   accent: "#ff6b35",
   danger: "#dc2626",
   warning: "#f59e0b",
@@ -27,28 +29,22 @@ const CustomColours = {
   textSecondary: "#a0a0a0",
   background: "#000000",
   card: "#1a1a1a",
-  border: "#333333"
+  border: "#333333",
+  goldLight: "#f8e68c", // Lighter gold for highlights
+  goldDark: "#b8950a"   // Darker gold for shadows
 };
 
 // Email validation regex
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
-// Helper function to convert object to URL-encoded form data
-const formUrlEncode = (data) => {
-  return Object.keys(data)
-    .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(data[key]))
-    .join('&');
-};
-
 export default function LoginScreen({ setIsAuthenticated }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false); // Changed to false by default
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   
-  // Animation for password shake effect
   const shakeAnimation = useState(new Animated.Value(0))[0];
 
   const validateEmail = (email) => {
@@ -66,7 +62,6 @@ export default function LoginScreen({ setIsAuthenticated }) {
     return true;
   };
 
-  // Shake animation function for wrong password
   const shakePasswordField = () => {
     Animated.sequence([
       Animated.timing(shakeAnimation, {
@@ -104,43 +99,22 @@ export default function LoginScreen({ setIsAuthenticated }) {
     }
 
     setIsLoading(true);
-    setPasswordError(""); // Clear previous password error
+    setPasswordError("");
 
     try {
-      // Prepare form data
-      const formData = formUrlEncode({
+      // Use the API function
+      await loginUser({
         email: email.trim(),
         password: password
       });
-
-      // API call to backend with www-form-urlencoded
-      const response = await fetch('https://yus.kwscloud.in/yus/admin-login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        if (data.login_status === "valid") {
-          // Success - automatically navigate without alert
-          setIsAuthenticated(true);
-        } else {
-          // Wrong password - shake animation and show error
-          shakePasswordField();
-          setPasswordError("Invalid email or password");
-        }
-      } else {
-        shakePasswordField();
-        setPasswordError("Login failed. Please try again.");
-      }
+      
+      // If login successful, navigate to main app
+      setIsAuthenticated(true);
+      
     } catch (error) {
       console.error('Login error:', error);
       shakePasswordField();
-      setPasswordError("Network error. Please check your connection.");
+      setPasswordError(error.message || "Login failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -148,18 +122,12 @@ export default function LoginScreen({ setIsAuthenticated }) {
 
   const handleEmailChange = (text) => {
     setEmail(text);
-    // Clear error when user starts typing
-    if (emailError) {
-      setEmailError("");
-    }
+    if (emailError) setEmailError("");
   };
 
   const handlePasswordChange = (text) => {
     setPassword(text);
-    // Clear error when user starts typing
-    if (passwordError) {
-      setPasswordError("");
-    }
+    if (passwordError) setPasswordError("");
   };
 
   const handleEmailBlur = () => {
@@ -182,20 +150,32 @@ export default function LoginScreen({ setIsAuthenticated }) {
         {/* Header Section */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <View style={styles.logo}>
-              <Text style={styles.logoIcon}>🚌</Text>
+            <View style={styles.imageContainer}>
+              <View style={styles.logoBackground}>
+                <Image
+                  source={require('../assets/images/YUS_LOGO.png')}
+                  style={styles.busImage}
+                  resizeMode="contain"
+                />
+              </View>
             </View>
           </View>
-          <Text style={styles.title}>Bus Route Manager</Text>
-          <Text style={styles.subtitle}>Admin Dashboard</Text>
+          <Text style={styles.title}>YUS Route Manager</Text>
+          <Text style={styles.subtitle}>Administrative Portal</Text>
         </View>
 
         {/* Login Form */}
         <View style={styles.formContainer}>
-          <Text style={styles.formTitle}>Admin Login</Text>
+          <View style={styles.formHeader}>
+            <View style={styles.formIcon}>
+              <Ionicons name="shield-checkmark" size={24} color={CustomColours.primary} />
+            </View>
+            <Text style={styles.formTitle}>Admin Authentication</Text>
+          </View>
           
           {/* Email Input */}
           <View style={styles.inputSection}>
+            <Text style={styles.inputLabel}>EMAIL ADDRESS</Text>
             <View style={[
               styles.inputContainer,
               emailError && styles.inputContainerError
@@ -203,7 +183,7 @@ export default function LoginScreen({ setIsAuthenticated }) {
               <Ionicons name="mail-outline" size={20} color={CustomColours.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder="Enter your email"
                 placeholderTextColor={CustomColours.textSecondary}
                 value={email}
                 onChangeText={handleEmailChange}
@@ -212,6 +192,7 @@ export default function LoginScreen({ setIsAuthenticated }) {
                 autoCorrect={false}
                 keyboardType="email-address"
                 autoComplete="email"
+                editable={!isLoading}
               />
             </View>
             {emailError ? (
@@ -221,6 +202,7 @@ export default function LoginScreen({ setIsAuthenticated }) {
 
           {/* Password Input with Shake Animation */}
           <View style={styles.inputSection}>
+            <Text style={styles.inputLabel}>PASSWORD</Text>
             <Animated.View 
               style={[
                 styles.inputContainer,
@@ -231,20 +213,22 @@ export default function LoginScreen({ setIsAuthenticated }) {
               <Ionicons name="lock-closed-outline" size={20} color={CustomColours.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Password"
+                placeholder="Enter your password"
                 placeholderTextColor={CustomColours.textSecondary}
                 value={password}
                 onChangeText={handlePasswordChange}
-                secureTextEntry={!showPassword} // This will be true by default (password hidden)
+                secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoComplete="password"
+                editable={!isLoading}
               />
               <TouchableOpacity 
                 style={styles.eyeIcon}
                 onPress={togglePasswordVisibility}
+                disabled={isLoading}
               >
                 <Ionicons 
-                  name={showPassword ? "eye-outline" : "eye-off-outline"} // Swapped the icons
+                  name={showPassword ? "eye-outline" : "eye-off-outline"}
                   size={20} 
                   color={CustomColours.textSecondary} 
                 />
@@ -271,7 +255,7 @@ export default function LoginScreen({ setIsAuthenticated }) {
                 <Ionicons name="log-in-outline" size={20} color="#000000" style={styles.buttonIcon} />
               )}
               <Text style={styles.loginButtonText}>
-                {isLoading ? "Signing In..." : "Sign In"}
+                {isLoading ? "Authenticating..." : "Access Dashboard"}
               </Text>
             </View>
           </TouchableOpacity>
@@ -279,7 +263,8 @@ export default function LoginScreen({ setIsAuthenticated }) {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Bus Management System v1.0</Text>
+          <Text style={styles.footerText}>© 2024 YUS Bus Management System</Text>
+          <Text style={styles.footerSubtext}>Secure Admin Portal v1.0</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -299,66 +284,97 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    marginBottom: 50,
+    marginBottom: 40,
   },
   logoContainer: {
-    marginBottom: 20,
+    marginBottom: 25,
   },
-  logo: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: CustomColours.primary,
+  imageContainer: {
+    width: 140, // Reduced from 180
+    height: 140, // Reduced from 180
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: CustomColours.primary,
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
+    backgroundColor: 'transparent',
   },
-  logoIcon: {
-    fontSize: 40,
+  logoBackground: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(232, 197, 19, 0.1)',
+    borderRadius: 70, // Reduced from 90
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: CustomColours.primary,
+  },
+  busImage: {
+    width: '85%', // Slightly increased to fill more space
+    height: '85%',
+    backgroundColor: 'transparent',
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
+    fontSize: 32,
+    fontWeight: "700",
     color: CustomColours.textDark,
     textAlign: "center",
     marginBottom: 8,
+    letterSpacing: 0.5,
   },
   subtitle: {
     fontSize: 16,
-    color: CustomColours.textSecondary,
+    color: CustomColours.primary,
     textAlign: "center",
+    fontWeight: "500",
+    letterSpacing: 1,
   },
   formContainer: {
     backgroundColor: CustomColours.card,
-    padding: 24,
-    borderRadius: 16,
+    padding: 28,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: CustomColours.border,
-    shadowColor: "#000",
+    shadowColor: CustomColours.primary,
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 8,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  formHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 32,
+  },
+  formIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(232, 197, 19, 0.1)',
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: CustomColours.primary,
   },
   formTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
+    fontSize: 20,
+    fontWeight: "600",
     color: CustomColours.textDark,
     textAlign: "center",
-    marginBottom: 30,
+    letterSpacing: 0.5,
   },
   inputSection: {
-    marginBottom: 20,
+    marginBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: CustomColours.textSecondary,
+    marginBottom: 8,
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
   inputContainer: {
     flexDirection: "row",
@@ -368,19 +384,21 @@ const styles = StyleSheet.create({
     borderColor: CustomColours.border,
     borderRadius: 12,
     paddingHorizontal: 16,
+    height: 56,
   },
   inputContainerError: {
     borderColor: CustomColours.danger,
+    backgroundColor: 'rgba(220, 38, 38, 0.05)',
   },
   inputIcon: {
     marginRight: 12,
   },
   input: {
     flex: 1,
-    paddingVertical: 16,
     color: CustomColours.textDark,
     fontSize: 16,
     fontWeight: "500",
+    letterSpacing: 0.5,
   },
   eyeIcon: {
     padding: 4,
@@ -388,23 +406,26 @@ const styles = StyleSheet.create({
   errorText: {
     color: CustomColours.danger,
     fontSize: 12,
-    marginTop: 4,
+    marginTop: 6,
     marginLeft: 8,
+    fontWeight: "500",
   },
   loginButton: {
     backgroundColor: CustomColours.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    marginTop: 10,
-    marginBottom: 20,
+    borderRadius: 14,
+    paddingVertical: 18,
+    marginTop: 16,
+    marginBottom: 8,
     shadowColor: CustomColours.primary,
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 6,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: CustomColours.goldDark,
   },
   loginButtonDisabled: {
     opacity: 0.7,
@@ -415,16 +436,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   buttonIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   loadingIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   loginButtonText: {
     color: "#000000",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "700",
     textAlign: "center",
+    letterSpacing: 0.5,
   },
   footer: {
     marginTop: 40,
@@ -434,5 +456,13 @@ const styles = StyleSheet.create({
     color: CustomColours.textSecondary,
     fontSize: 12,
     textAlign: "center",
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  footerSubtext: {
+    color: CustomColours.textSecondary,
+    fontSize: 10,
+    textAlign: "center",
+    opacity: 0.7,
   },
 });

@@ -15,7 +15,7 @@ import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import * as Location from "expo-location";
 import { useNavigation } from "@react-navigation/native";
 import { saveRoute } from "../utils/storage";
-import { send_route_to_server } from "../utils/Api";
+import { send_route_to_server, clearSession } from "../utils/Api";
 import Colours from "../constants/Colours";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -74,7 +74,7 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
     setIsDarkMode(!isDarkMode);
   };
 
-  // Logout function
+  // Logout function - UPDATED with SecureStore
   const handleLogout = () => {
     Alert.alert(
       "Logout",
@@ -84,7 +84,10 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
         { 
           text: "Logout", 
           style: "destructive",
-          onPress: () => setIsAuthenticated(false)
+          onPress: async () => {
+            await clearSession(); // Clear session from SecureStore
+            setIsAuthenticated(false);
+          }
         }
       ]
     );
@@ -200,6 +203,7 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
     );
   };
 
+  // UPDATED handleSaveRoute with better error handling
   const handleSaveRoute = async () => {
     if (stops.length < 2) {
       Alert.alert("Error", "At least 2 stops required.");
@@ -242,11 +246,39 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
         down_departure_time: downDepartureTime.trim()
       };
 
+      // Save locally first
       await saveRoute(routeData);
-      await send_route_to_server(routeData);
       
-      Alert.alert("Success", "Route saved locally and sent to server!");
+      // Try to send to server
+      try {
+        console.log('Attempting to send route to server...');
+        await send_route_to_server(routeData);
+        Alert.alert("Success", "Route saved locally and sent to server!");
+      } catch (serverError) {
+        console.error('Server sync error:', serverError);
+        if (serverError.message.includes('Authentication failed')) {
+          Alert.alert(
+            "Authentication Required", 
+            "Route saved locally. Please login again to sync with server.",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  // Optionally logout user or show login prompt
+                  // handleLogout();
+                }
+              }
+            ]
+          );
+        } else {
+          Alert.alert(
+            "Server Sync Failed", 
+            "Route saved locally but could not sync with server: " + serverError.message
+          );
+        }
+      }
       
+      // Clear form on success
       setStops([]);
       setUpRouteName("");
       setDownRouteName("");
@@ -259,9 +291,7 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
       console.error("Error saving route:", error);
       Alert.alert(
         "Save Error", 
-        error.message === "Network request failed" 
-          ? "Failed to connect to server. Route saved locally only."
-          : "Error saving route. Please try again."
+        "Error saving route locally. Please try again."
       );
     } finally {
       setIsSaving(false);
