@@ -13,5 +13,5 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-, "App.jsx", "utils/storage.js", "types/navigation.js", "screens/MapScreen.jsx", "screens/SavedRoutesScreens.jsx", "components/RouteCard.jsx", "constants/Colours.js", "navigation/AppNavigator.jsx"  ]
+, "App.jsx", "utils/storage.js", "types/navigation.js", "screens/MapScreen.jsx", "screens/SavedRoutesScreen.jsx", "components/RouteCard.jsx", "constants/Colours.js", "navigation/AppNavigator.jsx"  ]
 }

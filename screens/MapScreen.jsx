@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   Dimensions,
+  useColorScheme,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
@@ -20,9 +21,23 @@ import { Ionicons } from "@expo/vector-icons";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-// Custom color theme with black background
-const CustomColours = {
-  primary: "#FFD700", // Changed to #FFD700 (gold/yellow)
+// Color themes
+const LightColours = {
+  primary: "#FFD700",
+  secondary: "rgba(11, 8, 8, 1)",
+  accent: "#ff6b35",
+  danger: "#dc2626",
+  warning: "#f59e0b",
+  success: "#10b981",
+  textDark: "#000000",
+  textSecondary: "#666666",
+  background: "#ffffff",
+  card: "#f8f9fa",
+  border: "#e0e0e0"
+};
+
+const DarkColours = {
+  primary: "#FFD700",
   secondary: "rgba(11, 8, 8, 1)",
   accent: "#ff6b35",
   danger: "#dc2626",
@@ -35,8 +50,11 @@ const CustomColours = {
   border: "#333333"
 };
 
-export default function MapScreen({ setIsAuthenticated }) {
+export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMode }) {
   const navigation = useNavigation();
+  
+  const colours = isDarkMode ? DarkColours : LightColours;
+  
   const [stops, setStops] = useState([]);
   const [upRouteName, setUpRouteName] = useState("");
   const [downRouteName, setDownRouteName] = useState("");
@@ -49,7 +67,12 @@ export default function MapScreen({ setIsAuthenticated }) {
   const intervalRef = useRef(null);
 
   const sheetRef = useRef(null);
-  const snapPoints = useMemo(() => ["25%", "50%", "90%"], []);
+  const snapPoints = useMemo(() => ["25%", "50%","75%","90%","100%"], []);
+
+  // Toggle dark/light mode
+  const toggleColorScheme = () => {
+    setIsDarkMode(!isDarkMode);
+  };
 
   // Logout function
   const handleLogout = () => {
@@ -82,10 +105,11 @@ export default function MapScreen({ setIsAuthenticated }) {
     }
 
     const newStop = {
+      stop_sequence: stops.length + 1,
       location_name: stopName.trim(),
       lat: e.nativeEvent.coordinate.latitude.toString(),
       lon: e.nativeEvent.coordinate.longitude.toString(),
-      is_stop: true, // Default to true for bus stops
+      is_stop: true,
       arrival_time: arrivalTime.trim(),
     };
     setStops([...stops, newStop]);
@@ -113,6 +137,7 @@ export default function MapScreen({ setIsAuthenticated }) {
     }
 
     const newStop = {
+      stop_sequence: stops.length + 1,
       location_name: stopName.trim(),
       lat: loc.coords.latitude.toString(),
       lon: loc.coords.longitude.toString(),
@@ -124,7 +149,7 @@ export default function MapScreen({ setIsAuthenticated }) {
     setArrivalTime("");
   };
 
-  // Delete a single stop
+  // Delete a single stop and reorder sequences
   const handleDeleteStop = (index) => {
     Alert.alert(
       "Delete Stop",
@@ -138,7 +163,11 @@ export default function MapScreen({ setIsAuthenticated }) {
           text: "Delete",
           style: "destructive",
           onPress: () => {
-            const updatedStops = stops.filter((_, i) => i !== index);
+            const updatedStops = stops.filter((_, i) => i !== index)
+              .map((stop, i) => ({
+                ...stop,
+                stop_sequence: i + 1
+              }));
             setStops(updatedStops);
           }
         }
@@ -197,13 +226,13 @@ export default function MapScreen({ setIsAuthenticated }) {
     setIsSaving(true);
 
     try {
-      // Create the data structure according to the new format
       const routeData = {
         up_route_name: upRouteName.trim(),
         down_route_name: downRouteName.trim(),
         src: stops[0]?.location_name || "Start",
         dest: stops[stops.length - 1]?.location_name || "End",
         stops: stops.map((stop, index) => ({
+          stop_sequence: stop.stop_sequence,
           location_name: stop.location_name,
           lat: stop.lat,
           lon: stop.lon,
@@ -213,15 +242,11 @@ export default function MapScreen({ setIsAuthenticated }) {
         down_departure_time: downDepartureTime.trim()
       };
 
-      // Save to local storage
       await saveRoute(routeData);
-      
-      // Send to server
       await send_route_to_server(routeData);
       
       Alert.alert("Success", "Route saved locally and sent to server!");
       
-      // Reset form
       setStops([]);
       setUpRouteName("");
       setDownRouteName("");
@@ -229,8 +254,6 @@ export default function MapScreen({ setIsAuthenticated }) {
       setArrivalTime("");
       setDownDepartureTime("");
       setBusPosition(null);
-      
-      // REMOVED: navigation.navigate("SavedRoutes");
       
     } catch (error) {
       console.error("Error saving route:", error);
@@ -315,7 +338,7 @@ export default function MapScreen({ setIsAuthenticated }) {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: CustomColours.background }}>
+    <View style={{ flex: 1, backgroundColor: colours.background }}>
       {/* Map - Always visible in background */}
       <MapView
         style={{ flex: 1 }}
@@ -336,9 +359,9 @@ export default function MapScreen({ setIsAuthenticated }) {
               latitude: parseFloat(stop.lat), 
               longitude: parseFloat(stop.lon) 
             }}
-            title={`${idx + 1}. ${stop.location_name}`}
+            title={`${stop.stop_sequence}. ${stop.location_name}`}
             description={stop.is_stop ? `Bus Stop - Arrival: ${stop.arrival_time}` : `Passing Point - Arrival: ${stop.arrival_time}`}
-            pinColor={stop.is_stop ? CustomColours.primary : CustomColours.secondary}
+            pinColor={stop.is_stop ? colours.primary : colours.secondary}
           />
         ))}
         {stops.length > 1 && (
@@ -347,22 +370,42 @@ export default function MapScreen({ setIsAuthenticated }) {
               latitude: parseFloat(s.lat), 
               longitude: parseFloat(s.lon) 
             }))}
-            strokeColor={CustomColours.primary}
+            strokeColor={colours.primary}
             strokeWidth={4}
           />
         )}
         {busPosition && (
           <Marker coordinate={busPosition}>
-            <View style={styles.busMarker}>
+            <View style={[styles.busMarker, { borderColor: colours.primary }]}>
               <Text style={{ fontSize: 24 }}>🚌</Text>
             </View>
           </Marker>
         )}
       </MapView>
 
+      {/* Theme Toggle Button */}
+      <TouchableOpacity 
+        style={[styles.themeButton, { backgroundColor: colours.card }]}
+        onPress={toggleColorScheme}
+      >
+        <Ionicons 
+          name={isDarkMode ? "sunny" : "moon"} 
+          size={24} 
+          color={colours.primary} 
+        />
+      </TouchableOpacity>
+
+      {/* Saved Routes Button */}
+      <TouchableOpacity 
+        style={[styles.savedRoutesButton, { backgroundColor: colours.card }]}
+        onPress={() => navigation.navigate("SavedRoutes")}
+      >
+        <Ionicons name="list" size={24} color={colours.primary} />
+      </TouchableOpacity>
+
       {/* Logout Button */}
       <TouchableOpacity 
-        style={styles.logoutButton}
+        style={[styles.logoutButton, { backgroundColor: colours.danger }]}
         onPress={handleLogout}
       >
         <Ionicons name="log-out-outline" size={24} color="white" />
@@ -371,18 +414,18 @@ export default function MapScreen({ setIsAuthenticated }) {
       {/* BottomSheet */}
       <BottomSheet
         ref={sheetRef}
-        index={0} // Start at 25% (minimized)
+        index={0}
         snapPoints={snapPoints}
         onChange={handleSheetChange}
         enablePanDownToClose={false}
         handleIndicatorStyle={{
-          backgroundColor: CustomColours.primary,
+          backgroundColor: colours.primary,
           width: 40,
           height: 4,
           borderRadius: 2,
         }}
         backgroundStyle={{ 
-          backgroundColor: CustomColours.card, 
+          backgroundColor: colours.card, 
           borderTopLeftRadius: 20,
           borderTopRightRadius: 20,
           shadowColor: "#000",
@@ -396,13 +439,13 @@ export default function MapScreen({ setIsAuthenticated }) {
         }}
       >
         <BottomSheetScrollView 
-          style={styles.sheetContent}
+          style={[styles.sheetContent, { backgroundColor: colours.background }]}
           contentContainerStyle={styles.sheetContentContainer}
           showsVerticalScrollIndicator={false}
         >
           {/* Header Section */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Create Route</Text>
+          <View style={[styles.header, { borderBottomColor: colours.border }]}>
+            <Text style={[styles.headerTitle, { color: colours.textDark }]}>Create Route</Text>
           </View>
 
           {/* All Four Buttons in Horizontal Layout */}
@@ -412,10 +455,10 @@ export default function MapScreen({ setIsAuthenticated }) {
               onPress={handleLocateMe}
               disabled={isSaving}
             >
-              <View style={[styles.buttonIcon, { backgroundColor: CustomColours.accent }]}>
-                <Text style={styles.buttonIconText}>📍</Text>
+              <View style={[styles.buttonIcon, { backgroundColor: colours.accent }]}>
+                <Ionicons name="locate" size={24} color="white" />
               </View>
-              <Text style={styles.buttonLabel}>Locate Me</Text>
+              <Text style={[styles.buttonLabel, { color: colours.textSecondary }]}>Locate Me</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -424,13 +467,15 @@ export default function MapScreen({ setIsAuthenticated }) {
               disabled={isSaving}
             >
               <View style={[styles.buttonIcon, { 
-                backgroundColor: isSaving ? CustomColours.textSecondary : CustomColours.primary 
+                backgroundColor: isSaving ? colours.textSecondary : colours.primary 
               }]}>
-                <Text style={styles.buttonIconText}>
-                  {isSaving ? "⏳" : "💾"}
-                </Text>
+                <Ionicons 
+                  name={isSaving ? "hourglass" : "save"} 
+                  size={24} 
+                  color="white" 
+                />
               </View>
-              <Text style={styles.buttonLabel}>
+              <Text style={[styles.buttonLabel, { color: colours.textSecondary }]}>
                 {isSaving ? "Saving..." : "Save"}
               </Text>
             </TouchableOpacity>
@@ -440,10 +485,10 @@ export default function MapScreen({ setIsAuthenticated }) {
               onPress={handleClearRoute}
               disabled={isSaving}
             >
-              <View style={[styles.buttonIcon, { backgroundColor: CustomColours.danger }]}>
-                <Text style={styles.buttonIconText}>🗑</Text>
+              <View style={[styles.buttonIcon, { backgroundColor: colours.danger }]}>
+                <Ionicons name="trash" size={24} color="white" />
               </View>
-              <Text style={styles.buttonLabel}>Clear</Text>
+              <Text style={[styles.buttonLabel, { color: colours.textSecondary }]}>Clear</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -451,91 +496,120 @@ export default function MapScreen({ setIsAuthenticated }) {
               onPress={handleSimulateRoute}
               disabled={isSaving}
             >
-              <View style={[styles.buttonIcon, { backgroundColor: CustomColours.warning }]}>
-                <Text style={styles.buttonIconText}>🚍</Text>
+              <View style={[styles.buttonIcon, { backgroundColor: colours.warning }]}>
+                <Ionicons name="bus" size={24} color="white" />
               </View>
-              <Text style={styles.buttonLabel}>Simulate</Text>
+              <Text style={[styles.buttonLabel, { color: colours.textSecondary }]}>Simulate</Text>
             </TouchableOpacity>
           </View>
 
           {/* Form Section */}
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Route Details</Text>
+          <View style={[styles.formSection, { 
+            backgroundColor: colours.card, 
+            borderColor: colours.border 
+          }]}>
+            <Text style={[styles.sectionTitle, { color: colours.textDark }]}>Route Details</Text>
             
             <TextInput 
-              style={styles.input} 
-              placeholder="Up Route Name (e.g., Sattur to Kamaraj-College)" 
+              style={[styles.input, { 
+                color: colours.textDark, 
+                backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
+                borderColor: colours.border 
+              }]} 
+              placeholder="Up Route Name (e.g., Sattur to Kcet)" 
               value={upRouteName} 
               onChangeText={setUpRouteName} 
-              placeholderTextColor={CustomColours.textSecondary}
+              placeholderTextColor={colours.textSecondary}
               editable={!isSaving}
             />
             
             <TextInput 
-              style={styles.input} 
-              placeholder="Down Route Name (e.g., Kamaraj-College to Sattur)" 
+              style={[styles.input, { 
+                color: colours.textDark, 
+                backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
+                borderColor: colours.border 
+              }]} 
+              placeholder="Down Route Name (e.g., Kcet to Sattur)" 
               value={downRouteName} 
               onChangeText={setDownRouteName} 
-              placeholderTextColor={CustomColours.textSecondary}
+              placeholderTextColor={colours.textSecondary}
               editable={!isSaving}
             />
             
             <TextInput 
-              style={styles.input} 
+              style={[styles.input, { 
+                color: colours.textDark, 
+                backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
+                borderColor: colours.border 
+              }]} 
               placeholder="Stop Name *" 
               value={stopName} 
               onChangeText={setStopName} 
-              placeholderTextColor={CustomColours.textSecondary}
+              placeholderTextColor={colours.textSecondary}
               editable={!isSaving}
             />
             
             <TextInput 
-              style={styles.input} 
+              style={[styles.input, { 
+                color: colours.textDark, 
+                backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
+                borderColor: colours.border 
+              }]} 
               placeholder="Arrival Time * (e.g., 08:30)" 
               value={arrivalTime} 
               onChangeText={setArrivalTime} 
-              placeholderTextColor={CustomColours.textSecondary}
+              placeholderTextColor={colours.textSecondary}
               editable={!isSaving}
             />
 
             <TextInput 
-              style={styles.input} 
+              style={[styles.input, { 
+                color: colours.textDark, 
+                backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
+                borderColor: colours.border 
+              }]} 
               placeholder="Down Departure Time * (e.g., 16:40)" 
               value={downDepartureTime} 
               onChangeText={setDownDepartureTime} 
-              placeholderTextColor={CustomColours.textSecondary}
+              placeholderTextColor={colours.textSecondary}
               editable={!isSaving}
             />
 
-            <Text style={styles.instructionText}>
+            <Text style={[styles.instructionText, { color: colours.textSecondary }]}>
               👉 Tap on the map to add stops (Arrival Time is required)
             </Text>
           </View>
 
           {/* Stops List */}
           {stops.length > 0 && (
-            <View style={styles.stopsSection}>
+            <View style={[styles.stopsSection, { 
+              backgroundColor: colours.card, 
+              borderColor: colours.border 
+            }]}>
               <View style={styles.stopsHeader}>
-                <Text style={styles.sectionTitle}>
+                <Text style={[styles.sectionTitle, { color: colours.textDark }]}>
                   Route Stops ({stops.length}) - {stops[0]?.location_name} to {stops[stops.length - 1]?.location_name}
                 </Text>
                 <TouchableOpacity 
-                  style={styles.deleteAllButton}
+                  style={[styles.deleteAllButton, { backgroundColor: isDarkMode ? "#2a1a1a" : "#ffe6e6" }]}
                   onPress={handleDeleteAllStops}
                   disabled={isSaving}
                 >
-                  <Ionicons name="trash-outline" size={24} color={CustomColours.danger} />
+                  <Ionicons name="trash-outline" size={24} color={colours.danger} />
                 </TouchableOpacity>
               </View>
               {stops.map((stop, idx) => (
-                <View key={idx} style={styles.stopItem}>
+                <View key={idx} style={[styles.stopItem, { 
+                  backgroundColor: isDarkMode ? "#2a2a2a" : "#f8f9fa",
+                  borderColor: colours.border 
+                }]}>
                   <View style={styles.stopLeft}>
-                    <View style={styles.stopNumber}>
-                      <Text style={styles.stopNumberText}>{idx + 1}</Text>
+                    <View style={[styles.stopNumber, { backgroundColor: colours.primary }]}>
+                      <Text style={styles.stopNumberText}>{stop.stop_sequence}</Text>
                     </View>
                     <View style={styles.stopInfo}>
                       <View style={styles.stopHeader}>
-                        <Text style={styles.stopName}>{stop.location_name}</Text>
+                        <Text style={[styles.stopName, { color: colours.textDark }]}>{stop.location_name}</Text>
                         <TouchableOpacity 
                           style={[styles.stopTypeButton, stop.is_stop ? styles.stopTypeActive : styles.stopTypeInactive]}
                           onPress={() => toggleStopType(idx)}
@@ -546,10 +620,10 @@ export default function MapScreen({ setIsAuthenticated }) {
                           </Text>
                         </TouchableOpacity>
                       </View>
-                      <Text style={styles.stopCoordinates}>
+                      <Text style={[styles.stopCoordinates, { color: colours.textSecondary }]}>
                         {parseFloat(stop.lat).toFixed(4)}, {parseFloat(stop.lon).toFixed(4)}
                       </Text>
-                      <Text style={styles.arrivalTime}>
+                      <Text style={[styles.arrivalTime, { color: colours.primary }]}>
                         🕒 Arrival: {stop.arrival_time}
                       </Text>
                     </View>
@@ -559,7 +633,11 @@ export default function MapScreen({ setIsAuthenticated }) {
                     onPress={() => handleDeleteStop(idx)}
                     disabled={isSaving}
                   >
-                    <Ionicons name="close-circle" size={24} color={isSaving ? CustomColours.textSecondary : CustomColours.danger} />
+                    <Ionicons 
+                      name="close-circle" 
+                      size={24} 
+                      color={isSaving ? colours.textSecondary : colours.danger} 
+                    />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -574,7 +652,6 @@ export default function MapScreen({ setIsAuthenticated }) {
 const styles = StyleSheet.create({
   sheetContent: {
     flex: 1,
-    backgroundColor: "#000000",
   },
   sheetContentContainer: {
     padding: 16,
@@ -584,12 +661,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#333333",
   },
   headerTitle: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#ffffff",
     textAlign: "center",
   },
   buttonsContainer: {
@@ -619,22 +694,16 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  buttonIconText: {
-    fontSize: 18,
-  },
   buttonLabel: {
     fontSize: 12,
-    color: "#a0a0a0",
     fontWeight: "600",
     textAlign: "center",
   },
   formSection: {
     marginBottom: 20,
-    backgroundColor: "#1a1a1a",
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#333333",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -646,11 +715,9 @@ const styles = StyleSheet.create({
   },
   stopsSection: {
     marginBottom: 20,
-    backgroundColor: "#1a1a1a",
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#333333",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -669,28 +736,22 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "#ffffff",
     flex: 1,
   },
   deleteAllButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: "#2a1a1a",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#333333",
     borderRadius: 10,
     padding: 14,
     marginBottom: 12,
-    color: "#ffffff",
-    backgroundColor: "#2a2a2a",
     fontSize: 15,
     fontWeight: "500",
   },
   instructionText: {
     fontSize: 14,
-    color: "#a0a0a0",
     textAlign: "center",
     marginTop: 8,
     fontStyle: "italic",
@@ -699,12 +760,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#2a2a2a",
     padding: 12,
     borderRadius: 10,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: "#333333",
   },
   stopLeft: {
     flexDirection: "row",
@@ -712,7 +771,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stopNumber: {
-    backgroundColor: "#f9f978ff", // Changed to #FFD700
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -729,7 +787,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   stopNumberText: {
-    color: "black", // Changed to black for better contrast with yellow
+    color: "black",
     fontWeight: "bold",
     fontSize: 12,
   },
@@ -744,7 +802,6 @@ const styles = StyleSheet.create({
   },
   stopName: {
     fontWeight: "bold",
-    color: "#ffffff",
     flex: 1,
     marginRight: 8,
     fontSize: 15,
@@ -765,7 +822,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   stopTypeActive: {
-    backgroundColor:"#f9f978ff", // Changed to #FFD700
+    backgroundColor: "#FFD700",
   },
   stopTypeInactive: {
     backgroundColor: "rgba(11, 8, 8, 1)",
@@ -777,13 +834,11 @@ const styles = StyleSheet.create({
   },
   stopCoordinates: {
     fontSize: 12,
-    color: "#a0a0a0",
     marginBottom: 2,
     fontFamily: 'monospace',
   },
   arrivalTime: {
     fontSize: 11,
-    color: "#f9f978ff", // Changed to #FFD700
     fontWeight: "600",
   },
   deleteButton: {
@@ -803,14 +858,52 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 8,
     borderWidth: 2,
-    borderColor: "#f9f978ff", // Changed to #FFD700
   },
-  // Logout button styles
+  // Theme toggle button
+  themeButton: {
+    position: "absolute",
+    top: 50,
+    left: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  // Saved Routes Button
+  savedRoutesButton: {
+    position: "absolute",
+    top: 110,
+    right: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  // Logout button
   logoutButton: {
     position: "absolute",
     top: 50,
     right: 20,
-    backgroundColor: "#dc2626",
     width: 50,
     height: 50,
     borderRadius: 25,
