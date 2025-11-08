@@ -94,7 +94,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
         }))
       };
 
-      const result = await send_route_to_server(routeData);
+      const result = await send_route_to_server(route);
       
       Alert.alert("Success", "Route saved to server successfully!");
       console.log('Server response:', result);
