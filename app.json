@@ -48,6 +48,13 @@
       "eas": {
         "projectId": "319b1794-45b6-4818-ba02-e7f69c904904"
       }
+    },
+    "owner": "jack-san-145",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/319b1794-45b6-4818-ba02-e7f69c904904"
     }
   }
 }

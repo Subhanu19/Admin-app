@@ -1,20 +1,19 @@
-import React, { useState, useEffect } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
+import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
+  ActivityIndicator,
   Alert,
   Dimensions,
-  useColorScheme,
-  ActivityIndicator
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import { useNavigation, useIsFocused } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
-import { getSavedRoutes, deleteRoute, clearAllRoutes } from "../utils/storage";
 import { send_route_to_server } from "../utils/Api"; // Import your API function
+import { clearAllRoutes, deleteRoute, getSavedRoutes } from "../utils/storage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -78,21 +77,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
       
       console.log('Saving route to server:', route);
       
-      // Prepare the route data in the format expected by your API
-      const routeData = {
-        up_route_name: route.up_route_name,
-        down_route_name: route.down_route_name,
-        src: route.src,
-        dest: route.dest,
-        up_departure_time: route.up_departure_time,
-        down_departure_time: route.down_departure_time,
-        stops: route.stops.map(stop => ({
-          lat: stop.lat,
-          lon: stop.lon,
-          location_name: stop.location_name,
-          is_stop: stop.is_stop || false
-        }))
-      };
+      
 
       const result = await send_route_to_server(route);
       
@@ -180,7 +165,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
                   <Ionicons name="cloud-upload-outline" size={16} color="white" />
                 )}
                 <Text style={styles.saveButtonText}>
-                  {isLoading ? "Saving..." : "Save"}
+                  {isLoading ? "Sending..." : "Send"}
                 </Text>
               </TouchableOpacity>
               

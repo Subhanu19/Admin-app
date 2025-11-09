@@ -18,8 +18,11 @@ import { saveRoute } from "../utils/storage";
 import { send_route_to_server, clearSession } from "../utils/Api";
 import Colours from "../constants/Colours";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from '@react-native-community/datetimepicker';
+
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+
 
 // Color themes
 const LightColours = {
@@ -64,7 +67,13 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
   const [downDepartureTime, setDownDepartureTime] = useState("");
   const [sheetIndex, setSheetIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  // NEW: Source and Destination fields
+  const [source, setSource] = useState("");
+  const [destination, setDestination] = useState("");
   const intervalRef = useRef(null);
+  const [showArrivalPicker, setShowArrivalPicker] = useState(false);
+  const [showDeparturePicker, setShowDeparturePicker] = useState(false);
+
 
   const sheetRef = useRef(null);
   const snapPoints = useMemo(() => ["25%", "50%","75%","90%","100%"], []);
@@ -203,7 +212,7 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
     );
   };
 
-  // UPDATED handleSaveRoute with better error handling
+  // UPDATED handleSaveRoute with source and destination validation
   const handleSaveRoute = async () => {
     if (stops.length < 2) {
       Alert.alert("Error", "At least 2 stops required.");
@@ -211,6 +220,12 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
     }
     if (!upRouteName.trim() || !downRouteName.trim()) {
       Alert.alert("Error", "Please enter both route names.");
+      return;
+    }
+
+    // NEW: Check if source and destination are provided
+    if (!source.trim() || !destination.trim()) {
+      Alert.alert("Error", "Please enter both source and destination.");
       return;
     }
 
@@ -233,8 +248,8 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
       const routeData = {
         up_route_name: upRouteName.trim(),
         down_route_name: downRouteName.trim(),
-        src: stops[0]?.location_name || "Start",
-        dest: stops[stops.length - 1]?.location_name || "End",
+        src: source.trim(), // UPDATED: Use the source input field
+        dest: destination.trim(), // UPDATED: Use the destination input field
         stops: stops.map((stop, index) => ({
           stop_sequence: stop.stop_sequence,
           location_name: stop.location_name,
@@ -286,6 +301,8 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
       setArrivalTime("");
       setDownDepartureTime("");
       setBusPosition(null);
+      setSource(""); // NEW: Clear source field
+      setDestination(""); // NEW: Clear destination field
       
     } catch (error) {
       console.error("Error saving route:", error);
@@ -306,6 +323,8 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
     setArrivalTime("");
     setDownDepartureTime("");
     setBusPosition(null);
+    setSource(""); // NEW: Clear source field
+    setDestination(""); // NEW: Clear destination field
     if (intervalRef.current) clearInterval(intervalRef.current);
   };
 
@@ -565,6 +584,38 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
               placeholderTextColor={colours.textSecondary}
               editable={!isSaving}
             />
+
+            {/* NEW: Source and Destination fields side by side */}
+            <View style={styles.rowContainer}>
+              <View style={styles.halfInputContainer}>
+                <TextInput 
+                  style={[styles.halfInput, { 
+                    color: colours.textDark, 
+                    backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
+                    borderColor: colours.border 
+                  }]} 
+                  placeholder="Source *" 
+                  value={source} 
+                  onChangeText={setSource} 
+                  placeholderTextColor={colours.textSecondary}
+                  editable={!isSaving}
+                />
+              </View>
+              <View style={styles.halfInputContainer}>
+                <TextInput 
+                  style={[styles.halfInput, { 
+                    color: colours.textDark, 
+                    backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
+                    borderColor: colours.border 
+                  }]} 
+                  placeholder="Destination *" 
+                  value={destination} 
+                  onChangeText={setDestination} 
+                  placeholderTextColor={colours.textSecondary}
+                  editable={!isSaving}
+                />
+              </View>
+            </View>
             
             <TextInput 
               style={[styles.input, { 
@@ -578,32 +629,89 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
               placeholderTextColor={colours.textSecondary}
               editable={!isSaving}
             />
-            
-            <TextInput 
-              style={[styles.input, { 
-                color: colours.textDark, 
-                backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
-                borderColor: colours.border 
-              }]} 
-              placeholder="Arrival Time * (e.g., 08:30)" 
-              value={arrivalTime} 
-              onChangeText={setArrivalTime} 
-              placeholderTextColor={colours.textSecondary}
-              editable={!isSaving}
-            />
+            {/* Arrival Time Picker */}
+{/* Arrival Time Picker */}
+<TouchableOpacity
+  style={[
+    styles.timeInput,
+    {
+      flex: 1,
+      marginRight: 8,
+      borderColor: colours.border,
+      backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
+    },
+  ]}
+  onPress={() => setShowArrivalPicker(true)}
+  disabled={isSaving}
+>
+  <Text style={{ color: arrivalTime ? colours.textDark : colours.textSecondary }}>
+    {arrivalTime || "From Hour *"}
+  </Text>
 
-            <TextInput 
-              style={[styles.input, { 
-                color: colours.textDark, 
-                backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
-                borderColor: colours.border 
-              }]} 
-              placeholder="Down Departure Time * (e.g., 16:40)" 
-              value={downDepartureTime} 
-              onChangeText={setDownDepartureTime} 
-              placeholderTextColor={colours.textSecondary}
-              editable={!isSaving}
-            />
+  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+    {arrivalTime !== "" && (
+      <TouchableOpacity onPress={() => setArrivalTime("")}>
+        <Ionicons name="close-circle" size={20} color="#ff4444" />
+      </TouchableOpacity>
+    )}
+    <Ionicons name="time-outline" size={20} color={colours.textSecondary} />
+  </View>
+</TouchableOpacity>
+
+{showArrivalPicker && (
+  <DateTimePicker
+    mode="time"
+    value={new Date()}
+    is24Hour={true}
+    display="default"
+    onChange={(event, selectedDate) => {
+      setShowArrivalPicker(false);
+      if (selectedDate) {
+        const hours = selectedDate.getHours().toString().padStart(2, "0");
+        const minutes = selectedDate.getMinutes().toString().padStart(2, "0");
+        setArrivalTime(`${hours}:${minutes}`);
+      }
+    }}
+  />
+)}
+
+{/* Departure Time Picker */}
+<TouchableOpacity
+  style={[styles.timeInput, { flex: 1, marginRight: 8, borderColor: colours.border, backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff" }]}
+  onPress={() => setShowDeparturePicker(true)}
+  disabled={isSaving}
+>
+  <Text style={{ color: downDepartureTime ? colours.textDark : colours.textSecondary }}>
+    {downDepartureTime || "Departure Time *"}
+  </Text>
+
+  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+    {downDepartureTime !== "" && (
+      <TouchableOpacity onPress={() => setDownDepartureTime("")}>
+        <Ionicons name="close-circle" size={20} color="#ff4444" />
+      </TouchableOpacity>
+    )}
+    <Ionicons name="time-outline" size={20} color={colours.textSecondary} />
+  </View>
+</TouchableOpacity>
+
+
+{showDeparturePicker && (
+  <DateTimePicker
+    mode="time"
+    value={new Date()}
+    is24Hour={true}
+    display="default"
+    onChange={(event, selectedDate) => {
+      setShowDeparturePicker(false);
+      if (selectedDate) {
+        const hours = selectedDate.getHours().toString().padStart(2, '0');
+        const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+        setDownDepartureTime(`${hours}:${minutes}`);
+      }
+    }}
+  />
+)}
 
             <Text style={[styles.instructionText, { color: colours.textSecondary }]}>
               👉 Tap on the map to add stops (Arrival Time is required)
@@ -618,7 +726,7 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
             }]}>
               <View style={styles.stopsHeader}>
                 <Text style={[styles.sectionTitle, { color: colours.textDark }]}>
-                  Route Stops ({stops.length}) - {stops[0]?.location_name} to {stops[stops.length - 1]?.location_name}
+                  Route Stops ({stops.length}) - {source || stops[0]?.location_name} to {destination || stops[stops.length - 1]?.location_name}
                 </Text>
                 <TouchableOpacity 
                   style={[styles.deleteAllButton, { backgroundColor: isDarkMode ? "#2a1a1a" : "#ffe6e6" }]}
@@ -780,6 +888,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
   },
+  // NEW: Styles for side-by-side inputs
+  rowContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  halfInputContainer: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  halfInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 15,
+    fontWeight: "500",
+  },
   instructionText: {
     fontSize: 14,
     textAlign: "center",
@@ -929,6 +1054,18 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 8,
   },
+  timeInput: {
+  borderWidth: 1,
+  borderRadius: 10,
+  padding: 14,
+  marginBottom: 12,
+  fontSize: 15,
+  fontWeight: "500",
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+},
+
   // Logout button
   logoutButton: {
     position: "absolute",
