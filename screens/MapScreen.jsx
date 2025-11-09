@@ -18,11 +18,8 @@ import { saveRoute } from "../utils/storage";
 import { send_route_to_server, clearSession } from "../utils/Api";
 import Colours from "../constants/Colours";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from '@react-native-community/datetimepicker';
-
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-
 
 // Color themes
 const LightColours = {
@@ -71,12 +68,25 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
   const [source, setSource] = useState("");
   const [destination, setDestination] = useState("");
   const intervalRef = useRef(null);
-  const [showArrivalPicker, setShowArrivalPicker] = useState(false);
-  const [showDeparturePicker, setShowDeparturePicker] = useState(false);
-
 
   const sheetRef = useRef(null);
   const snapPoints = useMemo(() => ["25%", "50%","75%","90%","100%"], []);
+
+  // Format time automatically as HH:MM
+  const formatTime = (text, setter) => {
+    // Remove non-numeric chars
+    const cleaned = text.replace(/\D/g, "");
+    
+    let formatted = cleaned;
+    if (cleaned.length >= 3) {
+      formatted = cleaned.slice(0, 2) + ":" + cleaned.slice(2, 4);
+    }
+    
+    setter(formatted.slice(0, 5)); // Keep only HH:MM
+  };
+
+  // Validate correct HH:MM format
+  const validateTime = (time) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(time);
 
   // Toggle dark/light mode
   const toggleColorScheme = () => {
@@ -116,6 +126,12 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
       return;
     }
 
+    // Validate arrival time format
+    if (!validateTime(arrivalTime)) {
+      Alert.alert("Invalid Time", "Please enter arrival time in HH:MM format (e.g., 09:30)");
+      return;
+    }
+
     const newStop = {
       stop_sequence: stops.length + 1,
       location_name: stopName.trim(),
@@ -145,6 +161,12 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
 
     if (!arrivalTime.trim()) {
       Alert.alert("Error", "Please enter arrival time for this stop.");
+      return;
+    }
+
+    // Validate arrival time format
+    if (!validateTime(arrivalTime)) {
+      Alert.alert("Invalid Time", "Please enter arrival time in HH:MM format (e.g., 09:30)");
       return;
     }
 
@@ -239,6 +261,19 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
     // Check if departure time is provided
     if (!downDepartureTime.trim()) {
       Alert.alert("Error", "Please enter down departure time.");
+      return;
+    }
+
+    // Validate all arrival times
+    const invalidArrivalTimes = stops.filter(stop => !validateTime(stop.arrival_time));
+    if (invalidArrivalTimes.length > 0) {
+      Alert.alert("Invalid Time", "Please ensure all arrival times are in HH:MM format (e.g., 09:30)");
+      return;
+    }
+
+    // Validate departure time
+    if (!validateTime(downDepartureTime)) {
+      Alert.alert("Invalid Time", "Please enter departure time in HH:MM format (e.g., 09:30)");
       return;
     }
 
@@ -629,89 +664,38 @@ export default function MapScreen({ setIsAuthenticated, isDarkMode, setIsDarkMod
               placeholderTextColor={colours.textSecondary}
               editable={!isSaving}
             />
-            {/* Arrival Time Picker */}
-{/* Arrival Time Picker */}
-<TouchableOpacity
-  style={[
-    styles.timeInput,
-    {
-      flex: 1,
-      marginRight: 8,
-      borderColor: colours.border,
-      backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
-    },
-  ]}
-  onPress={() => setShowArrivalPicker(true)}
-  disabled={isSaving}
->
-  <Text style={{ color: arrivalTime ? colours.textDark : colours.textSecondary }}>
-    {arrivalTime || "From Hour *"}
-  </Text>
 
-  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-    {arrivalTime !== "" && (
-      <TouchableOpacity onPress={() => setArrivalTime("")}>
-        <Ionicons name="close-circle" size={20} color="#ff4444" />
-      </TouchableOpacity>
-    )}
-    <Ionicons name="time-outline" size={20} color={colours.textSecondary} />
-  </View>
-</TouchableOpacity>
+            {/* Arrival Time Input */}
+            <TextInput
+              style={[styles.input, { 
+                color: colours.textDark, 
+                backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
+                borderColor: colours.border 
+              }]} 
+              placeholder="Arrival Time (HH:MM) *" 
+              value={arrivalTime} 
+              onChangeText={(text) => formatTime(text, setArrivalTime)}
+              placeholderTextColor={colours.textSecondary}
+              editable={!isSaving}
+              keyboardType="numeric"
+              maxLength={5}
+            />
 
-{showArrivalPicker && (
-  <DateTimePicker
-    mode="time"
-    value={new Date()}
-    is24Hour={true}
-    display="default"
-    onChange={(event, selectedDate) => {
-      setShowArrivalPicker(false);
-      if (selectedDate) {
-        const hours = selectedDate.getHours().toString().padStart(2, "0");
-        const minutes = selectedDate.getMinutes().toString().padStart(2, "0");
-        setArrivalTime(`${hours}:${minutes}`);
-      }
-    }}
-  />
-)}
-
-{/* Departure Time Picker */}
-<TouchableOpacity
-  style={[styles.timeInput, { flex: 1, marginRight: 8, borderColor: colours.border, backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff" }]}
-  onPress={() => setShowDeparturePicker(true)}
-  disabled={isSaving}
->
-  <Text style={{ color: downDepartureTime ? colours.textDark : colours.textSecondary }}>
-    {downDepartureTime || "Departure Time *"}
-  </Text>
-
-  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-    {downDepartureTime !== "" && (
-      <TouchableOpacity onPress={() => setDownDepartureTime("")}>
-        <Ionicons name="close-circle" size={20} color="#ff4444" />
-      </TouchableOpacity>
-    )}
-    <Ionicons name="time-outline" size={20} color={colours.textSecondary} />
-  </View>
-</TouchableOpacity>
-
-
-{showDeparturePicker && (
-  <DateTimePicker
-    mode="time"
-    value={new Date()}
-    is24Hour={true}
-    display="default"
-    onChange={(event, selectedDate) => {
-      setShowDeparturePicker(false);
-      if (selectedDate) {
-        const hours = selectedDate.getHours().toString().padStart(2, '0');
-        const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
-        setDownDepartureTime(`${hours}:${minutes}`);
-      }
-    }}
-  />
-)}
+            {/* Departure Time Input */}
+            <TextInput
+              style={[styles.input, { 
+                color: colours.textDark, 
+                backgroundColor: isDarkMode ? "#2a2a2a" : "#ffffff",
+                borderColor: colours.border 
+              }]} 
+              placeholder="Departure Time (HH:MM) *" 
+              value={downDepartureTime} 
+              onChangeText={(text) => formatTime(text, setDownDepartureTime)}
+              placeholderTextColor={colours.textSecondary}
+              editable={!isSaving}
+              keyboardType="numeric"
+              maxLength={5}
+            />
 
             <Text style={[styles.instructionText, { color: colours.textSecondary }]}>
               👉 Tap on the map to add stops (Arrival Time is required)
@@ -1054,18 +1038,6 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 8,
   },
-  timeInput: {
-  borderWidth: 1,
-  borderRadius: 10,
-  padding: 14,
-  marginBottom: 12,
-  fontSize: 15,
-  fontWeight: "500",
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-},
-
   // Logout button
   logoutButton: {
     position: "absolute",
