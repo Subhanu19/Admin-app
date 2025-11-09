@@ -17,21 +17,21 @@ import { loginUser } from "../utils/Api";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-// Professional color theme with refined gold and dark background
+// Light theme colors
 const CustomColours = {
-  primary: "#e8c513e7",   // Refined gold color
-  secondary: "rgba(11, 8, 8, 1)", // Dark background
+  primary: "#FFD700",           // Gold
+  secondary: "rgba(11, 8, 8, 1)", // Dark for contrast
   accent: "#ff6b35",
   danger: "#dc2626",
   warning: "#f59e0b",
   success: "#10b981",
-  textDark: "#ffffff",
-  textSecondary: "#a0a0a0",
-  background: "#000000",
-  card: "#1a1a1a",
-  border: "#333333",
-  goldLight: "#f8e68c", // Lighter gold for highlights
-  goldDark: "#b8950a"   // Darker gold for shadows
+  textDark: "#000000",          // Black text
+  textSecondary: "#666666",     // Gray text
+  background: "#ffffff",        // White background
+  card: "#f8f9fa",             // Light gray card
+  border: "#e0e0e0",           // Light border
+  goldLight: "#f8e68c",        // Lighter gold
+  goldDark: "#b8950a"          // Darker gold
 };
 
 // Email validation regex
@@ -290,8 +290,8 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   imageContainer: {
-    width: 140, // Reduced from 180
-    height: 140, // Reduced from 180
+    width: 140,
+    height: 140,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: 'transparent',
@@ -299,15 +299,15 @@ const styles = StyleSheet.create({
   logoBackground: {
     width: '100%',
     height: '100%',
-    backgroundColor: 'rgba(232, 197, 19, 0.1)',
-    borderRadius: 70, // Reduced from 90
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: 70,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
     borderColor: CustomColours.primary,
   },
   busImage: {
-    width: '85%', // Slightly increased to fill more space
+    width: '85%',
     height: '85%',
     backgroundColor: 'transparent',
   },
@@ -332,14 +332,14 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: CustomColours.border,
-    shadowColor: CustomColours.primary,
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 8,
+      height: 4,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 12,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
   },
   formHeader: {
     flexDirection: "row",
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(232, 197, 19, 0.1)',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: CustomColours.border,
     borderRadius: 12,
@@ -416,14 +416,14 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     marginTop: 16,
     marginBottom: 8,
-    shadowColor: CustomColours.primary,
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 6,
+      height: 4,
     },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
     borderWidth: 1,
     borderColor: CustomColours.goldDark,
   },

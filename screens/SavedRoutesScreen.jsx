@@ -17,8 +17,8 @@ import { clearAllRoutes, deleteRoute, getSavedRoutes } from "../utils/storage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-// Color themes (keep your existing color definitions)
-const LightColours = {
+// Light theme colors only
+const Colours = {
   primary: "#FFD700",
   secondary: "rgba(11, 8, 8, 1)",
   accent: "#ff6b35",
@@ -32,25 +32,10 @@ const LightColours = {
   border: "#e0e0e0"
 };
 
-const DarkColours = {
-  primary: "#FFD700",
-  secondary: "rgba(11, 8, 8, 1)",
-  accent: "#ff6b35",
-  danger: "#dc2626",
-  warning: "#f59e0b",
-  success: "#10b981",
-  textDark: "#ffffff",
-  textSecondary: "#a0a0a0",
-  background: "#000000",
-  card: "#1a1a1a",
-  border: "#333333"
-};
-
-export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setIsDarkMode }) {
+export default function SavedRoutesScreen({ setIsAuthenticated }) {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   
-  const colours = isDarkMode ? DarkColours : LightColours;
   const [savedRoutes, setSavedRoutes] = useState([]);
   const [loadingRoutes, setLoadingRoutes] = useState({}); // Track loading state for each route
 
@@ -77,8 +62,6 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
       
       console.log('Saving route to server:', route);
       
-      
-
       const result = await send_route_to_server(route);
       
       Alert.alert("Success", "Route saved to server successfully!");
@@ -101,7 +84,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
     const isLoading = loadingRoutes[route.id];
     
     return (
-      <View style={[styles.routeCard, { backgroundColor: colours.card, borderColor: colours.border }]}>
+      <View style={[styles.routeCard, { backgroundColor: Colours.card, borderColor: Colours.border }]}>
         <View style={styles.mapContainer}>
           <MapView
             style={styles.miniMap}
@@ -118,7 +101,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
                   latitude: parseFloat(stop.lat), 
                   longitude: parseFloat(stop.lon) 
                 }}
-                pinColor={stop.is_stop ? colours.primary : colours.secondary}
+                pinColor={stop.is_stop ? Colours.primary : Colours.secondary}
               />
             ))}
             {route.stops.length > 1 && (
@@ -127,7 +110,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
                   latitude: parseFloat(stop.lat),
                   longitude: parseFloat(stop.lon)
                 }))}
-                strokeColor={colours.primary}
+                strokeColor={Colours.primary}
                 strokeWidth={3}
               />
             )}
@@ -137,13 +120,13 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
         <View style={styles.routeInfo}>
           <View style={styles.routeHeader}>
             <View style={styles.routeNames}>
-              <Text style={[styles.routeName, { color: colours.textDark }]}>
+              <Text style={[styles.routeName, { color: Colours.textDark }]}>
                 {route.up_route_name}
               </Text>
-              <Text style={[styles.routeDirection, { color: colours.textSecondary }]}>
+              <Text style={[styles.routeDirection, { color: Colours.textSecondary }]}>
                 ↑ {route.src} → {route.dest}
               </Text>
-              <Text style={[styles.routeDirection, { color: colours.textSecondary }]}>
+              <Text style={[styles.routeDirection, { color: Colours.textSecondary }]}>
                 ↓ {route.dest} → {route.src}
               </Text>
             </View>
@@ -153,7 +136,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
               <TouchableOpacity 
                 style={[
                   styles.saveButton, 
-                  { backgroundColor: colours.success },
+                  { backgroundColor: Colours.success },
                   isLoading && styles.saveButtonDisabled
                 ]}
                 onPress={() => handleSaveToServer(route)}
@@ -174,22 +157,22 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
                 style={styles.deleteCardButton}
                 onPress={() => handleDeleteRoute(route.id)}
               >
-                <Ionicons name="trash-outline" size={20} color={colours.danger} />
+                <Ionicons name="trash-outline" size={20} color={Colours.danger} />
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.routeDetails}>
             <View style={styles.detailItem}>
-              <Ionicons name="location-outline" size={14} color={colours.textSecondary} />
-              <Text style={[styles.detailText, { color: colours.textSecondary }]}>
+              <Ionicons name="location-outline" size={14} color={Colours.textSecondary} />
+              <Text style={[styles.detailText, { color: Colours.textSecondary }]}>
                 {route.stops.length} stops
               </Text>
             </View>
             
             <View style={styles.detailItem}>
-              <Ionicons name="time-outline" size={14} color={colours.textSecondary} />
-              <Text style={[styles.detailText, { color: colours.textSecondary }]}>
+              <Ionicons name="time-outline" size={14} color={Colours.textSecondary} />
+              <Text style={[styles.detailText, { color: Colours.textSecondary }]}>
                 Depart: {route.down_departure_time}
               </Text>
             </View>
@@ -199,7 +182,6 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
     );
   };
 
-  // Keep your existing handleDeleteRoute, handleClearAllRoutes, calculateRegion functions
   const handleDeleteRoute = (routeId) => {
     Alert.alert(
       "Delete Route",
@@ -258,7 +240,6 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
   };
 
   const calculateRegion = (stops) => {
-    // ... keep your existing calculateRegion function
     if (!stops || stops.length === 0) {
       return {
         latitude: 9.917,
@@ -288,21 +269,21 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colours.background }]}>
-      {/* Header remains the same */}
+    <View style={[styles.container, { backgroundColor: Colours.background }]}>
+      {/* Header */}
       <View style={[styles.header, { 
-        backgroundColor: colours.card, 
-        borderBottomColor: colours.border,
+        backgroundColor: Colours.card, 
+        borderBottomColor: Colours.border,
         paddingTop: 50,
       }]}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colours.primary} />
+          <Ionicons name="arrow-back" size={24} color={Colours.primary} />
         </TouchableOpacity>
         
-        <Text style={[styles.headerTitle, { color: colours.textDark }]}>
+        <Text style={[styles.headerTitle, { color: Colours.textDark }]}>
           Saved Routes ({savedRoutes.length})
         </Text>
         
@@ -314,7 +295,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
           <Ionicons 
             name="trash-bin-outline" 
             size={24} 
-            color={savedRoutes.length === 0 ? colours.textSecondary : colours.danger} 
+            color={savedRoutes.length === 0 ? Colours.textSecondary : Colours.danger} 
           />
         </TouchableOpacity>
       </View>
@@ -331,15 +312,15 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
         </ScrollView>
       ) : (
         <View style={styles.emptyState}>
-          <Ionicons name="map-outline" size={64} color={colours.textSecondary} />
-          <Text style={[styles.emptyStateText, { color: colours.textSecondary }]}>
+          <Ionicons name="map-outline" size={64} color={Colours.textSecondary} />
+          <Text style={[styles.emptyStateText, { color: Colours.textSecondary }]}>
             No saved routes yet
           </Text>
-          <Text style={[styles.emptyStateSubtext, { color: colours.textSecondary }]}>
+          <Text style={[styles.emptyStateSubtext, { color: Colours.textSecondary }]}>
             Create your first route in the Map screen
           </Text>
           <TouchableOpacity 
-            style={[styles.goToMapButton, { backgroundColor: colours.primary }]}
+            style={[styles.goToMapButton, { backgroundColor: Colours.primary }]}
             onPress={() => navigation.navigate("Map")}
           >
             <Text style={styles.goToMapButtonText}>Create Route</Text>
@@ -349,7 +330,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated, isDarkMode, setI
 
       {/* Logout Button */}
       <TouchableOpacity 
-        style={[styles.logoutButton, { backgroundColor: colours.danger }]}
+        style={[styles.logoutButton, { backgroundColor: Colours.danger }]}
         onPress={() => {
           Alert.alert(
             "Logout",
