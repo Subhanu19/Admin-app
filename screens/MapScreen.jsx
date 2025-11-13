@@ -10,7 +10,9 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { clearSession, send_route_to_server } from "../utils/Api";
@@ -398,340 +400,345 @@ export default function MapScreen({ setIsAuthenticated }) {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colours.background }}>
-      {/* Map - Always visible in background */}
-      <MapView
-        style={{ flex: 1 }}
-        initialRegion={{ 
-          latitude: 9.917, 
-          longitude: 78.119, 
-          latitudeDelta: 0.2, 
-          longitudeDelta: 0.2 
-        }}
-        onPress={handleMapPress}
-        showsUserLocation={true}
-        showsMyLocationButton={false}
-      >
-        {stops.map((stop, idx) => (
-          <Marker
-            key={idx}
-            coordinate={{ 
-              latitude: parseFloat(stop.lat), 
-              longitude: parseFloat(stop.lon) 
-            }}
-            title={`${stop.stop_sequence}. ${stop.location_name}`}
-            description={stop.is_stop ? `Bus Stop - Arrival: ${stop.arrival_time}` : `Passing Point - Arrival: ${stop.arrival_time}`}
-            pinColor={stop.is_stop ? Colours.primary : Colours.secondary}
-          />
-        ))}
-        {stops.length > 1 && (
-          <Polyline
-            coordinates={stops.map((s) => ({ 
-              latitude: parseFloat(s.lat), 
-              longitude: parseFloat(s.lon) 
-            }))}
-            strokeColor={Colours.primary}
-            strokeWidth={4}
-          />
-        )}
-        {busPosition && (
-          <Marker coordinate={busPosition}>
-            <View style={[styles.busMarker, { borderColor: Colours.primary }]}>
-              <Text style={{ fontSize: 24 }}>🚌</Text>
-            </View>
-          </Marker>
-        )}
-      </MapView>
-
-      {/* Saved Routes Button */}
-      <TouchableOpacity 
-        style={[styles.savedRoutesButton, { backgroundColor: Colours.card }]}
-        onPress={() => navigation.navigate("SavedRoutes")}
-      >
-        <Ionicons name="list" size={24} color={Colours.primary} />
-      </TouchableOpacity>
-
-      {/* Logout Button */}
-      <TouchableOpacity 
-        style={[styles.logoutButton, { backgroundColor: Colours.danger }]}
-        onPress={handleLogout}
-      >
-        <Ionicons name="log-out-outline" size={24} color="white" />
-      </TouchableOpacity>
-
-      {/* BottomSheet */}
-      <BottomSheet
-        ref={sheetRef}
-        index={0}
-        snapPoints={snapPoints}
-        onChange={handleSheetChange}
-        enablePanDownToClose={false}
-        handleIndicatorStyle={{
-          backgroundColor: Colours.primary,
-          width: 40,
-          height: 4,
-          borderRadius: 2,
-        }}
-        backgroundStyle={{ 
-          backgroundColor: Colours.card, 
-          borderTopLeftRadius: 20,
-          borderTopRightRadius: 20,
-          shadowColor: "#000",
-          shadowOffset: {
-            width: 0,
-            height: -2,
-          },
-          shadowOpacity: 0.3,
-          shadowRadius: 5,
-          elevation: 8,
-        }}
-      >
-        <BottomSheetScrollView 
-          style={[styles.sheetContent, { backgroundColor: Colours.background }]}
-          contentContainerStyle={styles.sheetContentContainer}
-          showsVerticalScrollIndicator={false}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1 }}
+    >
+      <View style={{ flex: 1, backgroundColor: Colours.background }}>
+        {/* Map - Always visible in background */}
+        <MapView
+          style={{ flex: 1 }}
+          initialRegion={{ 
+            latitude: 9.917, 
+            longitude: 78.119, 
+            latitudeDelta: 0.2, 
+            longitudeDelta: 0.2 
+          }}
+          onPress={handleMapPress}
+          showsUserLocation={true}
+          showsMyLocationButton={false}
         >
-          {/* Header Section */}
-          <View style={[styles.header, { borderBottomColor: Colours.border }]}>
-            <Text style={[styles.headerTitle, { color: Colours.textDark }]}>Create Route</Text>
-          </View>
+          {stops.map((stop, idx) => (
+            <Marker
+              key={idx}
+              coordinate={{ 
+                latitude: parseFloat(stop.lat), 
+                longitude: parseFloat(stop.lon) 
+              }}
+              title={`${stop.stop_sequence}. ${stop.location_name}`}
+              description={stop.is_stop ? `Bus Stop - Arrival: ${stop.arrival_time}` : `Passing Point - Arrival: ${stop.arrival_time}`}
+              pinColor={stop.is_stop ? Colours.primary : Colours.secondary}
+            />
+          ))}
+          {stops.length > 1 && (
+            <Polyline
+              coordinates={stops.map((s) => ({ 
+                latitude: parseFloat(s.lat), 
+                longitude: parseFloat(s.lon) 
+              }))}
+              strokeColor={Colours.primary}
+              strokeWidth={4}
+            />
+          )}
+          {busPosition && (
+            <Marker coordinate={busPosition}>
+              <View style={[styles.busMarker, { borderColor: Colours.primary }]}>
+                <Text style={{ fontSize: 24 }}>🚌</Text>
+              </View>
+            </Marker>
+          )}
+        </MapView>
 
-          {/* All Four Buttons in Horizontal Layout */}
-          <View style={styles.buttonsContainer}>
-            <TouchableOpacity 
-              style={styles.buttonWrapper} 
-              onPress={handleLocateMe}
-              disabled={isSaving}
-            >
-              <View style={[styles.buttonIcon, { backgroundColor: Colours.accent }]}>
-                <Ionicons name="locate" size={24} color="white" />
-              </View>
-              <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>Locate Me</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.buttonWrapper} 
-              onPress={handleSaveRoute}
-              disabled={isSaving}
-            >
-              <View style={[styles.buttonIcon, { 
-                backgroundColor: isSaving ? Colours.textSecondary : Colours.primary 
-              }]}>
-                <Ionicons 
-                  name={isSaving ? "hourglass" : "save"} 
-                  size={24} 
-                  color="white" 
-                />
-              </View>
-              <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>
-                {isSaving ? "Saving..." : "Save"}
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.buttonWrapper} 
-              onPress={handleClearRoute}
-              disabled={isSaving}
-            >
-              <View style={[styles.buttonIcon, { backgroundColor: Colours.danger }]}>
-                <Ionicons name="trash" size={24} color="white" />
-              </View>
-              <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>Clear</Text>
-            </TouchableOpacity>
+        {/* Saved Routes Button */}
+        <TouchableOpacity 
+          style={[styles.savedRoutesButton, { backgroundColor: Colours.card }]}
+          onPress={() => navigation.navigate("SavedRoutes")}
+        >
+          <Ionicons name="list" size={24} color={Colours.primary} />
+        </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.buttonWrapper} 
-              onPress={handleSimulateRoute}
-              disabled={isSaving}
-            >
-              <View style={[styles.buttonIcon, { backgroundColor: Colours.warning }]}>
-                <Ionicons name="bus" size={24} color="white" />
-              </View>
-              <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>Simulate</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Logout Button */}
+        <TouchableOpacity 
+          style={[styles.logoutButton, { backgroundColor: Colours.danger }]}
+          onPress={handleLogout}
+        >
+          <Ionicons name="log-out-outline" size={24} color="white" />
+        </TouchableOpacity>
 
-          {/* Form Section */}
-          <View style={[styles.formSection, { 
+        {/* BottomSheet */}
+        <BottomSheet
+          ref={sheetRef}
+          index={0}
+          snapPoints={snapPoints}
+          onChange={handleSheetChange}
+          enablePanDownToClose={false}
+          handleIndicatorStyle={{
+            backgroundColor: Colours.primary,
+            width: 40,
+            height: 4,
+            borderRadius: 2,
+          }}
+          backgroundStyle={{ 
             backgroundColor: Colours.card, 
-            borderColor: Colours.border 
-          }]}>
-            <Text style={[styles.sectionTitle, { color: Colours.textDark }]}>Route Details</Text>
-            
-            <TextInput 
-              style={[styles.input, { 
-                color: Colours.textDark, 
-                backgroundColor: "#ffffff",
-                borderColor: Colours.border 
-              }]} 
-              placeholder="Up Route Name (e.g., Sattur to Kcet)" 
-              value={upRouteName} 
-              onChangeText={setUpRouteName} 
-              placeholderTextColor={Colours.textSecondary}
-              editable={!isSaving}
-            />
-            
-            <TextInput 
-              style={[styles.input, { 
-                color: Colours.textDark, 
-                backgroundColor: "#ffffff",
-                borderColor: Colours.border 
-              }]} 
-              placeholder="Down Route Name (e.g., Kcet to Sattur)" 
-              value={downRouteName} 
-              onChangeText={setDownRouteName} 
-              placeholderTextColor={Colours.textSecondary}
-              editable={!isSaving}
-            />
-
-            {/* Source and Destination fields side by side */}
-            <View style={styles.rowContainer}>
-              <View style={styles.halfInputContainer}>
-                <TextInput 
-                  style={[styles.halfInput, { 
-                    color: Colours.textDark, 
-                    backgroundColor: "#ffffff",
-                    borderColor: Colours.border 
-                  }]} 
-                  placeholder="Source *" 
-                  value={source} 
-                  onChangeText={setSource} 
-                  placeholderTextColor={Colours.textSecondary}
-                  editable={!isSaving}
-                />
-              </View>
-              <View style={styles.halfInputContainer}>
-                <TextInput 
-                  style={[styles.halfInput, { 
-                    color: Colours.textDark, 
-                    backgroundColor: "#ffffff",
-                    borderColor: Colours.border 
-                  }]} 
-                  placeholder="Destination *" 
-                  value={destination} 
-                  onChangeText={setDestination} 
-                  placeholderTextColor={Colours.textSecondary}
-                  editable={!isSaving}
-                />
-              </View>
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            shadowColor: "#000",
+            shadowOffset: {
+              width: 0,
+              height: -2,
+            },
+            shadowOpacity: 0.3,
+            shadowRadius: 5,
+            elevation: 8,
+          }}
+        >
+          <BottomSheetScrollView 
+            style={[styles.sheetContent, { backgroundColor: Colours.background }]}
+            contentContainerStyle={styles.sheetContentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Header Section */}
+            <View style={[styles.header, { borderBottomColor: Colours.border }]}>
+              <Text style={[styles.headerTitle, { color: Colours.textDark }]}>Create Route</Text>
             </View>
-            
-            <TextInput 
-              style={[styles.input, { 
-                color: Colours.textDark, 
-                backgroundColor: "#ffffff",
-                borderColor: Colours.border 
-              }]} 
-              placeholder="Stop Name *" 
-              value={stopName} 
-              onChangeText={setStopName} 
-              placeholderTextColor={Colours.textSecondary}
-              editable={!isSaving}
-            />
 
-            {/* Arrival Time Input */}
-            <TextInput
-              style={[styles.input, { 
-                color: Colours.textDark, 
-                backgroundColor: "#ffffff",
-                borderColor: Colours.border 
-              }]} 
-              placeholder="Arrival Time (HH:MM) *" 
-              value={arrivalTime} 
-              onChangeText={(text) => formatTime(text, setArrivalTime)}
-              placeholderTextColor={Colours.textSecondary}
-              editable={!isSaving}
-              keyboardType="numeric"
-              maxLength={5}
-            />
+            {/* All Four Buttons in Horizontal Layout */}
+            <View style={styles.buttonsContainer}>
+              <TouchableOpacity 
+                style={styles.buttonWrapper} 
+                onPress={handleLocateMe}
+                disabled={isSaving}
+              >
+                <View style={[styles.buttonIcon, { backgroundColor: Colours.accent }]}>
+                  <Ionicons name="locate" size={24} color="white" />
+                </View>
+                <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>Locate Me</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.buttonWrapper} 
+                onPress={handleSaveRoute}
+                disabled={isSaving}
+              >
+                <View style={[styles.buttonIcon, { 
+                  backgroundColor: isSaving ? Colours.textSecondary : Colours.primary 
+                }]}>
+                  <Ionicons 
+                    name={isSaving ? "hourglass" : "save"} 
+                    size={24} 
+                    color="white" 
+                  />
+                </View>
+                <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>
+                  {isSaving ? "Saving..." : "Save"}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.buttonWrapper} 
+                onPress={handleClearRoute}
+                disabled={isSaving}
+              >
+                <View style={[styles.buttonIcon, { backgroundColor: Colours.danger }]}>
+                  <Ionicons name="trash" size={24} color="white" />
+                </View>
+                <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>Clear</Text>
+              </TouchableOpacity>
 
-            {/* Departure Time Input */}
-            <TextInput
-              style={[styles.input, { 
-                color: Colours.textDark, 
-                backgroundColor: "#ffffff",
-                borderColor: Colours.border 
-              }]} 
-              placeholder="Departure Time (HH:MM) *" 
-              value={downDepartureTime} 
-              onChangeText={(text) => formatTime(text, setDownDepartureTime)}
-              placeholderTextColor={Colours.textSecondary}
-              editable={!isSaving}
-              keyboardType="numeric"
-              maxLength={5}
-            />
+              <TouchableOpacity 
+                style={styles.buttonWrapper} 
+                onPress={handleSimulateRoute}
+                disabled={isSaving}
+              >
+                <View style={[styles.buttonIcon, { backgroundColor: Colours.warning }]}>
+                  <Ionicons name="bus" size={24} color="white" />
+                </View>
+                <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>Simulate</Text>
+              </TouchableOpacity>
+            </View>
 
-            <Text style={[styles.instructionText, { color: Colours.textSecondary }]}>
-              👉 Tap on the map to add stops (Arrival Time is required)
-            </Text>
-          </View>
-
-          {/* Stops List */}
-          {stops.length > 0 && (
-            <View style={[styles.stopsSection, { 
+            {/* Form Section */}
+            <View style={[styles.formSection, { 
               backgroundColor: Colours.card, 
               borderColor: Colours.border 
             }]}>
-              <View style={styles.stopsHeader}>
-                <Text style={[styles.sectionTitle, { color: Colours.textDark }]}>
-                  Route Stops ({stops.length}) - {source || stops[0]?.location_name} to {destination || stops[stops.length - 1]?.location_name}
-                </Text>
-                <TouchableOpacity 
-                  style={[styles.deleteAllButton, { backgroundColor: "#ffe6e6" }]}
-                  onPress={handleDeleteAllStops}
-                  disabled={isSaving}
-                >
-                  <Ionicons name="trash-outline" size={24} color={Colours.danger} />
-                </TouchableOpacity>
-              </View>
-              {stops.map((stop, idx) => (
-                <View key={idx} style={[styles.stopItem, { 
-                  backgroundColor: "#f8f9fa",
+              <Text style={[styles.sectionTitle, { color: Colours.textDark }]}>Route Details</Text>
+              
+              <TextInput 
+                style={[styles.input, { 
+                  color: Colours.textDark, 
+                  backgroundColor: "#ffffff",
                   borderColor: Colours.border 
-                }]}>
-                  <View style={styles.stopLeft}>
-                    <View style={[styles.stopNumber, { backgroundColor: Colours.primary }]}>
-                      <Text style={styles.stopNumberText}>{stop.stop_sequence}</Text>
-                    </View>
-                    <View style={styles.stopInfo}>
-                      <View style={styles.stopHeader}>
-                        <Text style={[styles.stopName, { color: Colours.textDark }]}>{stop.location_name}</Text>
-                        <TouchableOpacity 
-                          style={[styles.stopTypeButton, stop.is_stop ? styles.stopTypeActive : styles.stopTypeInactive]}
-                          onPress={() => toggleStopType(idx)}
-                          disabled={isSaving}
-                        >
-                          <Text style={styles.stopTypeText}>
-                            {stop.is_stop ? "Stop" : "Pass"}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                      <Text style={[styles.stopCoordinates, { color: Colours.textSecondary }]}>
-                        {parseFloat(stop.lat).toFixed(4)}, {parseFloat(stop.lon).toFixed(4)}
-                      </Text>
-                      <Text style={[styles.arrivalTime, { color: Colours.primary }]}>
-                        🕒 Arrival: {stop.arrival_time}
-                      </Text>
-                    </View>
-                  </View>
+                }]} 
+                placeholder="Up Route Name (e.g., Sattur to Kcet)" 
+                value={upRouteName} 
+                onChangeText={setUpRouteName} 
+                placeholderTextColor={Colours.textSecondary}
+                editable={!isSaving}
+              />
+              
+              <TextInput 
+                style={[styles.input, { 
+                  color: Colours.textDark, 
+                  backgroundColor: "#ffffff",
+                  borderColor: Colours.border 
+                }]} 
+                placeholder="Down Route Name (e.g., Kcet to Sattur)" 
+                value={downRouteName} 
+                onChangeText={setDownRouteName} 
+                placeholderTextColor={Colours.textSecondary}
+                editable={!isSaving}
+              />
+
+              {/* Source and Destination fields side by side */}
+              <View style={styles.rowContainer}>
+                <View style={styles.halfInputContainer}>
+                  <TextInput 
+                    style={[styles.halfInput, { 
+                      color: Colours.textDark, 
+                      backgroundColor: "#ffffff",
+                      borderColor: Colours.border 
+                    }]} 
+                    placeholder="Source *" 
+                    value={source} 
+                    onChangeText={setSource} 
+                    placeholderTextColor={Colours.textSecondary}
+                    editable={!isSaving}
+                  />
+                </View>
+                <View style={styles.halfInputContainer}>
+                  <TextInput 
+                    style={[styles.halfInput, { 
+                      color: Colours.textDark, 
+                      backgroundColor: "#ffffff",
+                      borderColor: Colours.border 
+                    }]} 
+                    placeholder="Destination *" 
+                    value={destination} 
+                    onChangeText={setDestination} 
+                    placeholderTextColor={Colours.textSecondary}
+                    editable={!isSaving}
+                  />
+                </View>
+              </View>
+              
+              <TextInput 
+                style={[styles.input, { 
+                  color: Colours.textDark, 
+                  backgroundColor: "#ffffff",
+                  borderColor: Colours.border 
+                }]} 
+                placeholder="Stop Name *" 
+                value={stopName} 
+                onChangeText={setStopName} 
+                placeholderTextColor={Colours.textSecondary}
+                editable={!isSaving}
+              />
+
+              {/* Arrival Time Input */}
+              <TextInput
+                style={[styles.input, { 
+                  color: Colours.textDark, 
+                  backgroundColor: "#ffffff",
+                  borderColor: Colours.border 
+                }]} 
+                placeholder="Arrival Time (HH:MM) *" 
+                value={arrivalTime} 
+                onChangeText={(text) => formatTime(text, setArrivalTime)}
+                placeholderTextColor={Colours.textSecondary}
+                editable={!isSaving}
+                keyboardType="numeric"
+                maxLength={5}
+              />
+
+              {/* Departure Time Input */}
+              <TextInput
+                style={[styles.input, { 
+                  color: Colours.textDark, 
+                  backgroundColor: "#ffffff",
+                  borderColor: Colours.border 
+                }]} 
+                placeholder="Departure Time (HH:MM) *" 
+                value={downDepartureTime} 
+                onChangeText={(text) => formatTime(text, setDownDepartureTime)}
+                placeholderTextColor={Colours.textSecondary}
+                editable={!isSaving}
+                keyboardType="numeric"
+                maxLength={5}
+              />
+
+              <Text style={[styles.instructionText, { color: Colours.textSecondary }]}>
+                👉 Tap on the map to add stops (Arrival Time is required)
+              </Text>
+            </View>
+
+            {/* Stops List */}
+            {stops.length > 0 && (
+              <View style={[styles.stopsSection, { 
+                backgroundColor: Colours.card, 
+                borderColor: Colours.border 
+              }]}>
+                <View style={styles.stopsHeader}>
+                  <Text style={[styles.sectionTitle, { color: Colours.textDark }]}>
+                    Route Stops ({stops.length}) - {source || stops[0]?.location_name} to {destination || stops[stops.length - 1]?.location_name}
+                  </Text>
                   <TouchableOpacity 
-                    style={styles.deleteButton}
-                    onPress={() => handleDeleteStop(idx)}
+                    style={[styles.deleteAllButton, { backgroundColor: "#ffe6e6" }]}
+                    onPress={handleDeleteAllStops}
                     disabled={isSaving}
                   >
-                    <Ionicons 
-                      name="close-circle" 
-                      size={24} 
-                      color={isSaving ? Colours.textSecondary : Colours.danger} 
-                    />
+                    <Ionicons name="trash-outline" size={24} color={Colours.danger} />
                   </TouchableOpacity>
                 </View>
-              ))}
-            </View>
-          )}
-        </BottomSheetScrollView>
-      </BottomSheet>
-    </View>
+                {stops.map((stop, idx) => (
+                  <View key={idx} style={[styles.stopItem, { 
+                    backgroundColor: "#f8f9fa",
+                    borderColor: Colours.border 
+                  }]}>
+                    <View style={styles.stopLeft}>
+                      <View style={[styles.stopNumber, { backgroundColor: Colours.primary }]}>
+                        <Text style={styles.stopNumberText}>{stop.stop_sequence}</Text>
+                      </View>
+                      <View style={styles.stopInfo}>
+                        <View style={styles.stopHeader}>
+                          <Text style={[styles.stopName, { color: Colours.textDark }]}>{stop.location_name}</Text>
+                          <TouchableOpacity 
+                            style={[styles.stopTypeButton, stop.is_stop ? styles.stopTypeActive : styles.stopTypeInactive]}
+                            onPress={() => toggleStopType(idx)}
+                            disabled={isSaving}
+                          >
+                            <Text style={styles.stopTypeText}>
+                              {stop.is_stop ? "Stop" : "Pass"}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={[styles.stopCoordinates, { color: Colours.textSecondary }]}>
+                          {parseFloat(stop.lat).toFixed(4)}, {parseFloat(stop.lon).toFixed(4)}
+                        </Text>
+                        <Text style={[styles.arrivalTime, { color: Colours.primary }]}>
+                          🕒 Arrival: {stop.arrival_time}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.deleteButton}
+                      onPress={() => handleDeleteStop(idx)}
+                      disabled={isSaving}
+                    >
+                      <Ionicons 
+                        name="close-circle" 
+                        size={24} 
+                        color={isSaving ? Colours.textSecondary : Colours.danger} 
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </BottomSheetScrollView>
+        </BottomSheet>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
