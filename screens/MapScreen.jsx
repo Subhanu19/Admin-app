@@ -1,21 +1,20 @@
-import React, { useState, useRef, useMemo } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { useNavigation } from "@react-navigation/native";
+import * as Location from "expo-location";
+import React, { useMemo, useRef, useState } from "react";
 import {
-  View,
+  Alert,
+  Dimensions,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Alert,
-  Dimensions,
+  View
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import * as Location from "expo-location";
-import { useNavigation } from "@react-navigation/native";
+import { clearSession, send_route_to_server } from "../utils/Api";
 import { saveRoute } from "../utils/storage";
-import { send_route_to_server, clearSession } from "../utils/Api";
-import { Ionicons } from "@expo/vector-icons";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 

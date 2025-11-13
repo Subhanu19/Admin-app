@@ -7,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   Dimensions,
   Animated,
   Image,
@@ -143,22 +142,15 @@ export default function LoginScreen({ setIsAuthenticated }) {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <ScrollView 
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.content}>
         {/* Header Section */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <View style={styles.imageContainer}>
-              <View style={styles.logoBackground}>
-                <Image
-                  source={require('../assets/images/YUS_LOGO.png')}
-                  style={styles.busImage}
-                  resizeMode="contain"
-                />
-              </View>
-            </View>
+            <Image
+              source={require('../assets/images/YUS_LOGO.png')}
+              style={styles.busImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.title}>YUS Route Manager</Text>
           <Text style={styles.subtitle}>Administrative Portal</Text>
@@ -266,7 +258,7 @@ export default function LoginScreen({ setIsAuthenticated }) {
           <Text style={styles.footerText}>© 2024 YUS Bus Management System</Text>
           <Text style={styles.footerSubtext}>Secure Admin Portal v1.0</Text>
         </View>
-      </ScrollView>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -276,47 +268,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: CustomColours.background,
   },
-  scrollContainer: {
-    flexGrow: 1,
+  content: {
+    flex: 1,
     justifyContent: "center",
     paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingVertical: 20,
   },
   header: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 30,
   },
   logoContainer: {
-    marginBottom: 25,
-  },
-  imageContainer: {
-    width: 140,
-    height: 140,
-    justifyContent: "center",
+    marginBottom: 8, // Reduced from 20 to 8 (very small space)
     alignItems: "center",
-    backgroundColor: 'transparent',
-  },
-  logoBackground: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
-    borderRadius: 70,
     justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: CustomColours.primary,
   },
   busImage: {
-    width: '85%',
-    height: '85%',
+    width: 180,
+    height: 180,
     backgroundColor: 'transparent',
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "700",
     color: CustomColours.textDark,
     textAlign: "center",
-    marginBottom: 8,
+    marginBottom: 4, // Reduced from 8 to 4
     letterSpacing: 0.5,
   },
   subtitle: {
@@ -328,7 +305,7 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     backgroundColor: CustomColours.card,
-    padding: 28,
+    padding: 24,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: CustomColours.border,
@@ -345,7 +322,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 32,
+    marginBottom: 24,
   },
   formIcon: {
     width: 40,
@@ -359,14 +336,14 @@ const styles = StyleSheet.create({
     borderColor: CustomColours.primary,
   },
   formTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
     color: CustomColours.textDark,
     textAlign: "center",
     letterSpacing: 0.5,
   },
   inputSection: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   inputLabel: {
     fontSize: 12,
@@ -413,7 +390,7 @@ const styles = StyleSheet.create({
   loginButton: {
     backgroundColor: CustomColours.primary,
     borderRadius: 14,
-    paddingVertical: 18,
+    paddingVertical: 16,
     marginTop: 16,
     marginBottom: 8,
     shadowColor: "#000",
@@ -449,7 +426,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   footer: {
-    marginTop: 40,
+    marginTop: 20,
     alignItems: "center",
   },
   footerText: {
