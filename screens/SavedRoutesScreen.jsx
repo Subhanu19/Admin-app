@@ -9,11 +9,18 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  RefreshControl
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import { send_route_to_server } from "../utils/Api"; // Import your API function
-import { clearAllRoutes, deleteRoute, getSavedRoutes } from "../utils/storage";
+import { 
+  send_route_to_server, 
+  createUpRoute, 
+  createDownRoute,
+  deleteRouteFromServer,
+  fetchAllRoutes 
+} from "../utils/Api";
+import { saveRoute,clearAllRoutes, deleteRoute, getSavedRoutes } from "../utils/storage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -25,6 +32,7 @@ const Colours = {
   danger: "#dc2626",
   warning: "#f59e0b",
   success: "#10b981",
+  info: "#3B82F6",
   textDark: "#000000",
   textSecondary: "#666666",
   background: "#ffffff",
@@ -37,155 +45,142 @@ export default function SavedRoutesScreen({ setIsAuthenticated }) {
   const isFocused = useIsFocused();
   
   const [savedRoutes, setSavedRoutes] = useState([]);
-  const [loadingRoutes, setLoadingRoutes] = useState({}); // Track loading state for each route
+  const [loadingRoutes, setLoadingRoutes] = useState({});
+  const [refreshing, setRefreshing] = useState(false);
+  const [downRouteStatus, setDownRouteStatus] = useState({});
 
   useEffect(() => {
     if (isFocused) {
       loadSavedRoutes();
     }
   }, [isFocused]);
+const loadSavedRoutes = async () => {
+  try {
+    const localRoutes = await getSavedRoutes();
 
-  const loadSavedRoutes = async () => {
-    try {
-      const routes = await getSavedRoutes();
-      setSavedRoutes(routes);
-    } catch (error) {
-      console.error("Error loading saved routes:", error);
-      Alert.alert("Error", "Failed to load saved routes.");
+    // ❌ REMOVE any route with 0 stops (UP / DOWN / SAME PATH)
+    const cleanedRoutes = localRoutes.filter(route => {
+      return Array.isArray(route.stops) && route.stops.length > 0;
+    });
+
+    // 🔥 rewrite storage only if something was removed
+    if (cleanedRoutes.length !== localRoutes.length) {
+      await clearAllRoutes();
+      for (const r of cleanedRoutes) {
+        await saveRoute(r);
+      }
     }
+
+    setSavedRoutes(cleanedRoutes);
+    checkDownRouteStatus(cleanedRoutes);
+
+  } catch (error) {
+    console.error("Error loading saved routes:", error);
+    Alert.alert("Error", "Failed to load saved routes.");
+  }
+};
+
+
+
+const checkDownRouteStatus = (routes) => {
+  const status = {};
+
+  for (const route of routes) {
+    const isSamePath = route.same_path === true || route.same_path === "true";
+    const direction = route.direction?.toUpperCase();
+    const isUpRoute = direction === "UP";
+
+    if (!isSamePath && isUpRoute && route.id) {
+      status[route.id] = routes.some(
+        r =>
+          r.direction?.toUpperCase() === "DOWN" &&
+          r.linked_route_id === route.id
+      );
+    }
+  }
+
+  setDownRouteStatus(status);
+};
+
+ 
+
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadSavedRoutes();
+    setRefreshing(false);
   };
 
-  // New function to handle saving route to server
+  // Updated handleSaveToServer to support different path routes
   const handleSaveToServer = async (route) => {
     try {
       setLoadingRoutes(prev => ({ ...prev, [route.id]: true }));
       
-      console.log('Saving route to server:', route);
+      console.log('Saving route to server:', {
+        route_name: route.route_name || route.up_route_name,
+        same_path: route.same_path,
+        direction: route.direction,
+        stops: route.stops?.length || 0
+      });
       
-      const result = await send_route_to_server(route);
+      let result;
       
-      Alert.alert("Success", "Route saved to server successfully!");
+      if (route.same_path === true || route.same_path === undefined) {
+        // Same path route
+        result = await send_route_to_server(route);
+      } else if (route.same_path === false) {
+        // Different path route
+        if (route.direction === 'UP') {
+          result = await createUpRoute(route);
+          // Update the route ID if it's returned from server
+          if (result.route_id) {
+            // You might want to update the local storage with the server ID
+          }
+        } else if (route.direction === 'DOWN') {
+          if (route.linked_route_id) {
+            result = await createDownRoute(route, route.linked_route_id);
+          } else {
+            throw new Error("Linked route ID is required for DOWN route");
+          }
+        }
+      }
+      
+      Alert.alert("✅ Success", "Route saved to server successfully!");
       console.log('Server response:', result);
       
     } catch (error) {
       console.error('Error saving route to server:', error);
-      Alert.alert(
-        "Error", 
-        error.message || "Failed to save route to server. Please try again."
-      );
+      
+      if (error.message?.includes('Authentication failed')) {
+        Alert.alert(
+          "Authentication Required", 
+          "Please login again to save routes.",
+          [
+            {
+              text: "Login",
+              onPress: () => setIsAuthenticated(false)
+            },
+            {
+              text: "Cancel",
+              style: "cancel"
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          "Error", 
+          error.message || "Failed to save route to server. Please try again."
+        );
+      }
     } finally {
       setLoadingRoutes(prev => ({ ...prev, [route.id]: false }));
     }
   };
 
-  // Updated RouteCard component with Save button
-  const RouteCard = ({ route, index }) => {
-    const region = calculateRegion(route.stops);
-    const isLoading = loadingRoutes[route.id];
-    
-    return (
-      <View style={[styles.routeCard, { backgroundColor: Colours.card, borderColor: Colours.border }]}>
-        <View style={styles.mapContainer}>
-          <MapView
-            style={styles.miniMap}
-            region={region}
-            scrollEnabled={false}
-            zoomEnabled={false}
-            pitchEnabled={false}
-            rotateEnabled={false}
-          >
-            {route.stops.map((stop, idx) => (
-              <Marker
-                key={idx}
-                coordinate={{ 
-                  latitude: parseFloat(stop.lat), 
-                  longitude: parseFloat(stop.lon) 
-                }}
-                pinColor={stop.is_stop ? Colours.primary : Colours.secondary}
-              />
-            ))}
-            {route.stops.length > 1 && (
-              <Polyline
-                coordinates={route.stops.map(stop => ({
-                  latitude: parseFloat(stop.lat),
-                  longitude: parseFloat(stop.lon)
-                }))}
-                strokeColor={Colours.primary}
-                strokeWidth={3}
-              />
-            )}
-          </MapView>
-        </View>
-
-        <View style={styles.routeInfo}>
-          <View style={styles.routeHeader}>
-            <View style={styles.routeNames}>
-              <Text style={[styles.routeName, { color: Colours.textDark }]}>
-                {route.up_route_name}
-              </Text>
-              <Text style={[styles.routeDirection, { color: Colours.textSecondary }]}>
-                ↑ {route.src} → {route.dest}
-              </Text>
-              <Text style={[styles.routeDirection, { color: Colours.textSecondary }]}>
-                ↓ {route.dest} → {route.src}
-              </Text>
-            </View>
-            
-            <View style={styles.cardActions}>
-              {/* Save to Server Button */}
-              <TouchableOpacity 
-                style={[
-                  styles.saveButton, 
-                  { backgroundColor: Colours.success },
-                  isLoading && styles.saveButtonDisabled
-                ]}
-                onPress={() => handleSaveToServer(route)}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <Ionicons name="cloud-upload-outline" size={16} color="white" />
-                )}
-                <Text style={styles.saveButtonText}>
-                  {isLoading ? "Sending..." : "Send"}
-                </Text>
-              </TouchableOpacity>
-              
-              {/* Delete Button */}
-              <TouchableOpacity 
-                style={styles.deleteCardButton}
-                onPress={() => handleDeleteRoute(route.id)}
-              >
-                <Ionicons name="trash-outline" size={20} color={Colours.danger} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.routeDetails}>
-            <View style={styles.detailItem}>
-              <Ionicons name="location-outline" size={14} color={Colours.textSecondary} />
-              <Text style={[styles.detailText, { color: Colours.textSecondary }]}>
-                {route.stops.length} stops
-              </Text>
-            </View>
-            
-            <View style={styles.detailItem}>
-              <Ionicons name="time-outline" size={14} color={Colours.textSecondary} />
-              <Text style={[styles.detailText, { color: Colours.textSecondary }]}>
-                Depart: {route.down_departure_time}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const handleDeleteRoute = (routeId) => {
+  const handleDeleteRoute = async (route) => {
     Alert.alert(
       "Delete Route",
-      "Are you sure you want to delete this route?",
+      `Are you sure you want to delete "${route.route_name || route.up_route_name}"?`,
       [
         {
           text: "Cancel",
@@ -196,7 +191,14 @@ export default function SavedRoutesScreen({ setIsAuthenticated }) {
           style: "destructive",
           onPress: async () => {
             try {
-              await deleteRoute(routeId);
+              // Delete from local storage
+              await deleteRoute(route.id);
+              
+              // Optionally delete from server
+              // if (route.server_id) {
+              //   await deleteRouteFromServer(route.server_id);
+              // }
+              
               await loadSavedRoutes();
               Alert.alert("Success", "Route deleted successfully!");
             } catch (error) {
@@ -236,6 +238,188 @@ export default function SavedRoutesScreen({ setIsAuthenticated }) {
           }
         }
       ]
+    );
+  };
+
+  const handleMarkDownRoute = (route) => {
+    navigation.navigate("Map", {
+      routeId: route.id,
+      mode: "different",
+      direction: "DOWN"
+    });
+  };
+
+  const handleEditRoute = (route) => {
+    navigation.navigate("Map", {
+      editRoute: route,
+      mode: route.same_path === false ? 'different' : 'same',
+      direction: route.direction || 'UP'
+    });
+  };
+
+  // Updated RouteCard component with support for different path
+  const RouteCard = ({ route, index }) => {
+    const region = calculateRegion(route.stops);
+    const isLoading = loadingRoutes[route.id];
+    const isSamePath = route.same_path === true || route.same_path === "true";
+    const direction = route.direction?.toUpperCase();
+    const isUpRoute = direction === "UP";
+    const isDownRoute = direction === "DOWN";
+    const hasDownRouteCreated = downRouteStatus[route.id] === true;
+
+
+    
+    return (
+      <View style={[styles.routeCard, { backgroundColor: Colours.card, borderColor: Colours.border }]}>
+        {/* Path Type Indicator - UPDATED */}
+        <View style={[
+          styles.pathTypeIndicator,
+          isSamePath ? styles.samePathIndicator : styles.differentPathIndicator
+        ]}>
+          <Text style={styles.pathTypeText}>
+            {isSamePath ? "SAME PATH" : "DIFFERENT PATH"}
+          </Text>
+          {!isSamePath && route.linked_route_id && isDownRoute && (
+            <Text style={styles.linkedRouteText}>Linked to: {route.linked_route_id}</Text>
+          )}
+        </View>
+        
+        <View style={styles.mapContainer}>
+          <MapView
+            style={styles.miniMap}
+            region={region}
+            scrollEnabled={false}
+            zoomEnabled={false}
+            pitchEnabled={false}
+            rotateEnabled={false}
+          >
+            {route.stops && route.stops.map((stop, idx) => (
+              <Marker
+                key={idx}
+                coordinate={{ 
+                  latitude: parseFloat(stop.lat), 
+                  longitude: parseFloat(stop.lon) 
+                }}
+                pinColor={stop.is_stop ? Colours.primary : Colours.secondary}
+              />
+            ))}
+            {route.stops && route.stops.length > 1 && (
+              <Polyline
+                coordinates={route.stops.map(stop => ({
+                  latitude: parseFloat(stop.lat),
+                  longitude: parseFloat(stop.lon)
+                }))}
+                strokeColor={isSamePath ? Colours.primary : isUpRoute ? Colours.success : Colours.info}
+                strokeWidth={3}
+              />
+            )}
+          </MapView>
+        </View>
+
+        <View style={styles.routeInfo}>
+          <View style={styles.routeHeader}>
+            <View style={styles.routeNames}>
+              <Text style={[styles.routeName, { color: Colours.textDark }]}>
+                {isSamePath ? `${route.up_route_name} / ${route.down_route_name}` : 
+                 route.route_name || route.up_route_name}
+              </Text>
+              
+              <Text style={[styles.routeDirection, { color: Colours.textSecondary }]}>
+                {isSamePath ? (
+                  <>
+                    <Text>↑ {route.src} → {route.dest}</Text>
+                    {'\n'}
+                    <Text>↓ {route.dest} → {route.src}</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text>{isUpRoute ? '↑ UP: ' : '↓ DOWN: '} {route.src} → {route.dest}</Text>
+                    
+                  </>
+                )}
+              </Text>
+            </View>
+            <View style={styles.cardActions}>
+              <TouchableOpacity 
+                style={[styles.iconButton, styles.deleteButton]}
+                onPress={() => handleDeleteRoute(route)}
+              >
+                <Ionicons name="trash-outline" size={18} color={Colours.danger} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.routeDetails}>
+            <View style={styles.detailItem}>
+              <Ionicons name="location-outline" size={14} color={Colours.textSecondary} />
+              <Text style={[styles.detailText, { color: Colours.textSecondary }]}>
+                {route.stops?.length || 0} stops
+              </Text>
+            </View>
+            
+            {isSamePath && route.down_departure_time && (
+              <View style={styles.detailItem}>
+                <Ionicons name="time-outline" size={14} color={Colours.textSecondary} />
+                <Text style={[styles.detailText, { color: Colours.textSecondary }]}>
+                  Depart: {route.down_departure_time}
+                </Text>
+              </View>
+            )}
+            
+            {/* Route Direction Badge for Different Path */}
+            {!isSamePath && (
+              <View style={[
+                styles.directionBadge,
+                isUpRoute ? styles.upDirectionBadge : styles.downDirectionBadge
+              ]}>
+                <Text style={styles.directionBadgeText}>
+                  {isUpRoute ? "UP ROUTE" : "DOWN ROUTE"}
+                </Text>
+              </View>
+            )}
+          </View>
+          
+          <View style={styles.actionButtonsRow}>
+            {/* Save to Server Button */}
+            <TouchableOpacity 
+              style={[
+                styles.actionButton, 
+                styles.saveButton,
+                isLoading && styles.buttonDisabled
+              ]}
+              onPress={() => handleSaveToServer(route)}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <>
+                  <Ionicons name="cloud-upload-outline" size={16} color="white" />
+                  <Text style={styles.actionButtonText}>Send to Server</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Mark Down Route Button - UPDATED LOGIC */}
+            {!isSamePath && isUpRoute && (
+              hasDownRouteCreated ? (
+                <View style={styles.markedBadge}>
+                  <Text style={styles.markedText}>MARKED</Text>
+                </View>
+              ) : (
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.markDownButton]}
+                  onPress={() => handleMarkDownRoute(route)}
+                >
+                  <Ionicons name="eye-outline" size={16} color="white" />
+                  <Text style={styles.actionButtonText}>Mark Down</Text>
+                </TouchableOpacity>
+              )
+            )}
+          </View>
+
+        </View>
+      </View>
     );
   };
 
@@ -305,7 +489,21 @@ export default function SavedRoutesScreen({ setIsAuthenticated }) {
           style={styles.routesList}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.routesListContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[Colours.primary]}
+              tintColor={Colours.primary}
+            />
+          }
         >
+          {/* Filter Options */}
+          <View style={styles.filterContainer}>
+            <Text style={styles.filterLabel}>Showing: All Routes</Text>
+            {/* You can add filter buttons here for Same Path / Different Path */}
+          </View>
+          
           {savedRoutes.map((route, index) => (
             <RouteCard key={route.id || index} route={route} index={index} />
           ))}
@@ -313,7 +511,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated }) {
       ) : (
         <View style={styles.emptyState}>
           <Ionicons name="map-outline" size={64} color={Colours.textSecondary} />
-          <Text style={[styles.emptyStateText, { color: Colours.textSecondary }]}>
+          <Text style={[styles.emptyStateText, { color: Colours.textDark }]}>
             No saved routes yet
           </Text>
           <Text style={[styles.emptyStateSubtext, { color: Colours.textSecondary }]}>
@@ -323,6 +521,7 @@ export default function SavedRoutesScreen({ setIsAuthenticated }) {
             style={[styles.goToMapButton, { backgroundColor: Colours.primary }]}
             onPress={() => navigation.navigate("Map")}
           >
+            <Ionicons name="add-circle-outline" size={20} color="#000" />
             <Text style={styles.goToMapButtonText}>Create Route</Text>
           </TouchableOpacity>
         </View>
@@ -388,12 +587,21 @@ const styles = StyleSheet.create({
     width: 40,
     alignItems: "flex-end",
   },
+  filterContainer: {
+    paddingHorizontal: 8,
+    marginBottom: 12,
+  },
+  filterLabel: {
+    fontSize: 14,
+    color: Colours.textSecondary,
+    fontWeight: '500',
+  },
   routesList: {
     flex: 1,
   },
   routesListContent: {
     padding: 16,
-    paddingBottom: 80,
+    paddingBottom: 100,
   },
   routeCard: {
     borderRadius: 12,
@@ -408,6 +616,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
+  },
+  pathTypeIndicator: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  samePathIndicator: {
+    backgroundColor: Colours.warning + '20', // Light yellow
+  },
+  differentPathIndicator: {
+    backgroundColor: Colours.info + '20', // Light blue
+  },
+  pathTypeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: Colours.textDark,
+    textAlign: 'center',
+  },
+  linkedRouteText: {
+    fontSize: 9,
+    color: Colours.textSecondary,
+    textAlign: 'center',
+    marginTop: 2,
   },
   mapContainer: {
     height: 120,
@@ -437,35 +670,35 @@ const styles = StyleSheet.create({
   routeDirection: {
     fontSize: 12,
     marginBottom: 2,
+    lineHeight: 16,
   },
-  // New styles for card actions
+  linkedInfo: {
+    fontSize: 10,
+    color: Colours.info,
+    fontStyle: 'italic',
+  },
   cardActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-  },
-  saveButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
     gap: 4,
   },
-  saveButtonDisabled: {
-    opacity: 0.6,
+  iconButton: {
+    padding: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colours.border,
   },
-  saveButtonText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
+  editButton: {
+    backgroundColor: Colours.success + '10',
   },
-  deleteCardButton: {
-    padding: 4,
+  deleteButton: {
+    backgroundColor: Colours.danger + '10',
   },
   routeDetails: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
   },
   detailItem: {
     flexDirection: "row",
@@ -474,6 +707,70 @@ const styles = StyleSheet.create({
   detailText: {
     fontSize: 12,
     marginLeft: 4,
+    color: Colours.textSecondary,
+  },
+  directionBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  upDirectionBadge: {
+    backgroundColor: Colours.success + '20',
+    borderColor: Colours.success,
+    borderWidth: 1,
+  },
+  downDirectionBadge: {
+    backgroundColor: Colours.info + '20',
+    borderColor: Colours.info,
+    borderWidth: 1,
+  },
+  directionBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: Colours.textDark,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    gap: 6,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  saveButton: {
+    backgroundColor: Colours.success,
+  },
+  markDownButton: {
+    backgroundColor: "#FF7A18", // Orange color
+  },
+  actionButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  markedBadge: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#FFA500', // Orange
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markedText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   emptyState: {
     flex: 1,
@@ -494,9 +791,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   goToMapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 25,
+    gap: 8,
   },
   goToMapButtonText: {
     color: "black",
@@ -505,7 +806,7 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     position: "absolute",
-    bottom: 20,
+    bottom: 80,
     right: 20,
     width: 50,
     height: 50,
@@ -522,3 +823,4 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
 });
+

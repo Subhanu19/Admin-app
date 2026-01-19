@@ -1,3 +1,5 @@
+
+
 import * as SecureStore from 'expo-secure-store';
 import { VirtualizedList } from 'react-native';
 
@@ -25,7 +27,7 @@ const send_route_to_server = async (new_route) => {
 
     console.log('Sending route to server with session_id:', sessionId ? 'Yes' : 'No');
 
-    const response = await fetch("https://yus.kwscloud.in/yus/save-new-route", {
+    const response = await fetch("https://yus.kwscloud.in/yus/save-same-path-route", {
       method: "POST",
       headers: headers,
       body: JSON.stringify(new_route),
@@ -46,7 +48,7 @@ const send_route_to_server = async (new_route) => {
     console.log('Route saved successfully:', result);
     return result;
   } catch (error) {
-    console.error("Error sending route to server:", error);
+    console.log("Error sending route to server:", error);
     throw error;
   }
 };
@@ -91,7 +93,6 @@ const loginUser = async (credentials) => {
       throw new Error("Invalid email or password");
     }
   } catch (error) {
-    console.error('Error during login:', error);
     throw error;
   }
 };
@@ -102,7 +103,7 @@ const clearSession = async () => {
     await SecureStore.deleteItemAsync('session_id');
     console.log('Session cleared from SecureStore');
   } catch (error) {
-    console.error('Error clearing session:', error);
+    console.log('Error clearing session:', error);
   }
 };
 
@@ -112,7 +113,7 @@ const isAuthenticated = async () => {
     const sessionId = await SecureStore.getItemAsync('session_id');
     return sessionId !== null;
   } catch (error) {
-    console.error('Error checking authentication:', error);
+    console.log('Error checking authentication:', error);
     return false;
   }
 };
@@ -123,10 +124,48 @@ const getCurrentSession = async () => {
     const sessionId = await SecureStore.getItemAsync('session_id');
     return sessionId;
   } catch (error) {
-    console.error('Error getting session:', error);
+    console.log('Error getting session:', error);
     return null;
   }
 };
+export const saveDifferentPathRoute = async (routeData) => {
+  const sessionId = await SecureStore.getItemAsync("session_id");
+
+  const response = await fetch(
+    "https://yus.kwscloud.in/yus/save-different-path-route",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": sessionId,
+      },
+      body: JSON.stringify(routeData),
+    }
+  );
+
+  return response.json();
+};
+export const fetchRouteById = async (routeId) => {
+  const sessionId = await SecureStore.getItemAsync("session_id");
+
+  const response = await fetch(
+    `https://yus.kwscloud.in/yus/get-route-by-id/${routeId}`,
+    {
+      method: "GET",
+      headers: {
+        "Authorization": sessionId,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch route: ${response.status}`);
+  }
+
+  return response.json();
+};
+
+
 
 // Export all functions at the end to avoid circular dependencies
 export {
@@ -134,5 +173,5 @@ export {
   loginUser,
   clearSession,
   isAuthenticated,
-  getCurrentSession
+  getCurrentSession,
 };

@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import * as Location from "expo-location";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import {
   Alert,
   Dimensions,
@@ -15,8 +15,13 @@ import {
   Platform
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import { clearSession, send_route_to_server } from "../utils/Api";
-import { saveRoute } from "../utils/storage";
+import { 
+  clearSession, 
+  send_route_to_server, 
+  saveDifferentPathRoute,
+  fetchRouteById 
+} from "../utils/Api";
+import { saveRoute, getSavedRoutes } from "../utils/storage";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -37,7 +42,9 @@ const Colours = {
 
 export default function MapScreen({ setIsAuthenticated }) {
   const navigation = useNavigation();
+  const route = useRoute();
   
+  // Existing states
   const [stops, setStops] = useState([]);
   const [upRouteName, setUpRouteName] = useState("");
   const [downRouteName, setDownRouteName] = useState("");
@@ -47,29 +54,83 @@ export default function MapScreen({ setIsAuthenticated }) {
   const [downDepartureTime, setDownDepartureTime] = useState("");
   const [sheetIndex, setSheetIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
-  // Source and Destination fields
   const [source, setSource] = useState("");
   const [destination, setDestination] = useState("");
   const intervalRef = useRef(null);
 
+  // New states for different path feature
+  const [routeMode, setRouteMode] = useState('same'); // 'same' or 'different'
+  const [direction, setDirection] = useState('UP'); // 'up' or 'down'
+  const [linkedRouteId, setLinkedRouteId] = useState(null);
+  const [isLoadingRoute, setIsLoadingRoute] = useState(false);
+
+  // Get navigation params
+  const { routeId, mode, direction: navDirection } = route.params || {};
+
   const sheetRef = useRef(null);
   const snapPoints = useMemo(() => ["25%", "50%","75%","90%","100%"], []);
 
+  // Initialize from navigation params
+  useEffect(() => {
+    if (mode === 'different' && navDirection) {
+      setRouteMode('different');
+      setDirection(navDirection);
+      setLinkedRouteId(routeId);
+      
+      // If we have a routeId, load the existing UP route data for reference
+      if (routeId && navDirection === 'DOWN') {
+        loadUpRouteData(routeId);
+      }
+    }
+  }, [mode, navDirection, routeId]);
+
+  // Load UP route data for reference when creating DOWN route
+  const loadUpRouteData = async (id) => {
+    setIsLoadingRoute(true);
+    try {
+      const savedRoutes = await getSavedRoutes();
+      const upRoute = savedRoutes.find(r => r.id === id);
+
+      if (upRoute) {
+        // ✅ DO NOT set downRouteName at all
+        // Admin must type it manually
+        setSource(upRoute.dest || "");
+        setDestination(upRoute.src || "");
+      }
+    } catch (error) {
+      console.error("Failed to load UP route:", error);
+    } finally {
+      setIsLoadingRoute(false);
+    }
+  };
+
   // Format time automatically as HH:MM
   const formatTime = (text, setter) => {
-    // Remove non-numeric chars
     const cleaned = text.replace(/\D/g, "");
-    
     let formatted = cleaned;
     if (cleaned.length >= 3) {
       formatted = cleaned.slice(0, 2) + ":" + cleaned.slice(2, 4);
     }
-    
-    setter(formatted.slice(0, 5)); // Keep only HH:MM
+    setter(formatted.slice(0, 5));
   };
 
   // Validate correct HH:MM format
   const validateTime = (time) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(time);
+
+  // Helper functions for conditional rendering
+  const showUpRouteFields = () => routeMode === 'same' || direction === 'UP';
+  const showDownRouteFields = () => routeMode === 'same' || direction === 'DOWN';
+  const showDownDepartureTime = () => routeMode === 'same';
+  const isDifferentPathMode = () => routeMode === 'different';
+  const isUpDirection = () => direction === 'UP';
+
+  const getSaveButtonText = () => {
+    if (isSaving) return "Saving...";
+    if (routeMode === 'different') {
+      return direction === 'UP' ? "Save UP Route" : "Save DOWN Route";
+    }
+    return "Save Route";
+  };
 
   // Logout function
   const handleLogout = () => {
@@ -82,7 +143,7 @@ export default function MapScreen({ setIsAuthenticated }) {
           text: "Logout", 
           style: "destructive",
           onPress: async () => {
-            await clearSession(); // Clear session from SecureStore
+            await clearSession();
             setIsAuthenticated(false);
           }
         }
@@ -91,7 +152,6 @@ export default function MapScreen({ setIsAuthenticated }) {
   };
 
   const handleMapPress = (e) => {
-    // Don't add stops when sheet is fully expanded
     if (sheetIndex === 2) return;
     
     if (!stopName.trim()) {
@@ -104,7 +164,6 @@ export default function MapScreen({ setIsAuthenticated }) {
       return;
     }
 
-    // Validate arrival time format
     if (!validateTime(arrivalTime)) {
       Alert.alert("Invalid Time", "Please enter arrival time in HH:MM format (e.g., 09:30)");
       return;
@@ -142,7 +201,6 @@ export default function MapScreen({ setIsAuthenticated }) {
       return;
     }
 
-    // Validate arrival time format
     if (!validateTime(arrivalTime)) {
       Alert.alert("Invalid Time", "Please enter arrival time in HH:MM format (e.g., 09:30)");
       return;
@@ -161,7 +219,7 @@ export default function MapScreen({ setIsAuthenticated }) {
     setArrivalTime("");
   };
 
-  // Delete a single stop and reorder sequences
+  // Delete a single stop
   const handleDeleteStop = (index) => {
     Alert.alert(
       "Delete Stop",
@@ -212,117 +270,259 @@ export default function MapScreen({ setIsAuthenticated }) {
     );
   };
 
-  // UPDATED handleSaveRoute with source and destination validation
+  // UPDATED: Enhanced handleSaveRoute with correct payload structure AND LOCAL SAVE
   const handleSaveRoute = async () => {
+    // Common validation
     if (stops.length < 2) {
       Alert.alert("Error", "At least 2 stops required.");
       return;
     }
-    if (!upRouteName.trim() || !downRouteName.trim()) {
-      Alert.alert("Error", "Please enter both route names.");
-      return;
-    }
 
-    // Check if source and destination are provided
     if (!source.trim() || !destination.trim()) {
       Alert.alert("Error", "Please enter both source and destination.");
-      return;
-    }
-
-    // Check if all stops have arrival time
-    const stopsWithoutArrivalTime = stops.filter(stop => !stop.arrival_time);
-    if (stopsWithoutArrivalTime.length > 0) {
-      Alert.alert("Error", "All stops must have arrival time.");
-      return;
-    }
-
-    // Check if departure time is provided
-    if (!downDepartureTime.trim()) {
-      Alert.alert("Error", "Please enter down departure time.");
       return;
     }
 
     // Validate all arrival times
     const invalidArrivalTimes = stops.filter(stop => !validateTime(stop.arrival_time));
     if (invalidArrivalTimes.length > 0) {
-      Alert.alert("Invalid Time", "Please ensure all arrival times are in HH:MM format (e.g., 09:30)");
+      Alert.alert("Invalid Time", "Please ensure all arrival times are in HH:MM format");
       return;
     }
 
-    // Validate departure time
-    if (!validateTime(downDepartureTime)) {
-      Alert.alert("Invalid Time", "Please enter departure time in HH:MM format (e.g., 09:30)");
-      return;
+    // Route name validation based on mode
+    if (routeMode === 'same') {
+      if (!upRouteName.trim() || !downRouteName.trim()) {
+        Alert.alert("Error", "Please enter both route names.");
+        return;
+      }
+      if (!downDepartureTime.trim()) {
+        Alert.alert("Error", "Please enter down departure time.");
+        return;
+      }
+      if (!validateTime(downDepartureTime)) {
+        Alert.alert("Invalid Time", "Please enter departure time in HH:MM format");
+        return;
+      }
+    } else {
+      // DIFFERENT PATH MODE VALIDATION
+      if (direction === 'UP') {
+        if (!upRouteName.trim()) {
+          Alert.alert("Error", "Please enter UP route name.");
+          return;
+        }
+      } else {
+        // DOWN direction
+        if (!downRouteName.trim()) {
+          Alert.alert("Error", "Please enter DOWN route name.");
+          return;
+        }
+      }
     }
 
     setIsSaving(true);
 
     try {
-      const routeData = {
-        up_route_name: upRouteName.trim(),
-        down_route_name: downRouteName.trim(),
-        src: source.trim(),
-        dest: destination.trim(),
-        stops: stops.map((stop, index) => ({
-          stop_sequence: stop.stop_sequence,
-          location_name: stop.location_name,
-          lat: stop.lat,
-          lon: stop.lon,
-          is_stop: stop.is_stop,
-          arrival_time: stop.arrival_time
-        })),
-        down_departure_time: downDepartureTime.trim()
-      };
+      const formattedStops = stops.map((stop) => ({
+        stop_sequence: stop.stop_sequence,
+        location_name: stop.location_name,
+        lat: stop.lat,
+        lon: stop.lon,
+        is_stop: stop.is_stop,
+        arrival_time: stop.arrival_time
+      }));
 
-      // Save locally first
-      await saveRoute(routeData);
-      
-      // Try to send to server
-      try {
-        console.log('Attempting to send route to server...');
+      if (routeMode === 'same') {
+        // SAME PATH LOGIC
+        const routeData = {
+          up_route_name: upRouteName.trim(),
+          down_route_name: downRouteName.trim(),
+          src: source.trim(),
+          dest: destination.trim(),
+          stops: formattedStops,
+          down_departure_time: downDepartureTime.trim(),
+          same_path: true,
+          direction: 'both'
+        };
+
+        // Save locally first
+        await saveRoute(routeData);
+        
+        // Then send to server
         await send_route_to_server(routeData);
-        Alert.alert("Success", "Route saved locally and sent to server!");
-      } catch (serverError) {
-        console.error('Server sync error:', serverError);
-        if (serverError.message.includes('Authentication failed')) {
+        Alert.alert("Success", "Route saved successfully!");
+
+        // Clear form
+        handleClearRoute();
+        
+      } else {
+        // DIFFERENT PATH LOGIC
+        if (direction === 'UP') {
+          // UP ROUTE - Create new route
+          const upPayload = {
+            up_route_name: upRouteName.trim(),
+            src: source.trim(),
+            dest: destination.trim(),
+            direction: "UP",
+            stops: formattedStops,
+          };
+
+          // Send to server
+          const res = await saveDifferentPathRoute(upPayload);
+
+          if (res.status) {
+            const newRouteId = res.route_id;
+            setLinkedRouteId(newRouteId);
+            
+            // ✅ CRITICAL: SAVE LOCALLY FOR SAVED ROUTES SCREEN
+            await saveRoute({
+              id: newRouteId, // Use server route_id as ID
+              up_route_name: upRouteName.trim(),
+              down_route_name: null,
+              src: source.trim(),
+              dest: destination.trim(),
+              stops: formattedStops,
+              same_path: false,
+              has_down_route: false, // 🔑 This determines if "Mark Down" button shows
+              direction: "UP",
+              created_at: new Date().toISOString()
+            });
+            
+            // Show success with option to create down route
+            Alert.alert(
+              "✅ UP Route Created!",
+              `Route ID: ${newRouteId}\n\nDo you want to create the corresponding DOWN route now?`,
+              [
+                { 
+                  text: "Later", 
+                  style: "cancel",
+                  onPress: () => {
+                    // Navigate to saved routes
+                    navigation.navigate("SavedRoutes");
+                  }
+                },
+                { 
+                  text: "Create DOWN Route", 
+                  onPress: () => {
+                    // Clear form but keep UP route info for reference
+                    setStops([]);
+                    setStopName("");
+                    setArrivalTime("");
+                    setBusPosition(null);
+                    setSource("");
+                    setDestination("");
+                    setDownRouteName(""); // Clear down route name
+                    // Switch to DOWN direction
+                    setDirection('DOWN');
+                  }
+                }
+              ]
+            );
+            
+          } else {
+            throw new Error(res.message || "Failed to create UP route");
+          }
+          
+        } else {
+          // DOWN ROUTE - Link to existing UP route
+          if (!linkedRouteId) {
+            Alert.alert("Error", "UP Route ID is required for DOWN route creation.");
+            setIsSaving(false);
+            return;
+          }
+
+          const downPayload = {
+            route_id: linkedRouteId,
+            down_route_name: downRouteName.trim(),
+            src: source.trim(),
+            dest: destination.trim(),
+            direction: "DOWN",
+            stops: formattedStops,
+          };
+
+          // Send to server
+          await saveDifferentPathRoute(downPayload);
+          
+          // ✅ CRITICAL: UPDATE LOCAL STORAGE TO MARK DOWN ROUTE EXISTS
+          // First, get existing saved routes
+          const savedRoutes = await getSavedRoutes();
+          const upRouteIndex = savedRoutes.findIndex(r => r.id === linkedRouteId);
+          
+          if (upRouteIndex !== -1) {
+            // Update the UP route to mark that down route exists
+            const updatedRoutes = [...savedRoutes];
+            updatedRoutes[upRouteIndex] = {
+              ...updatedRoutes[upRouteIndex],
+              has_down_route: true // 🔑 This will hide the "Mark Down" button
+            };
+            
+            // Save updated routes
+            const { saveRoute } = require("../utils/storage");
+            await saveRoute(updatedRoutes);
+          }
+          
+          // Also save the DOWN route locally
+          await saveRoute({
+            id: `down_${linkedRouteId}`, // Different ID for down route
+            route_name: downRouteName.trim(),  
+            src: source.trim(),
+            dest: destination.trim(),
+            stops: formattedStops,
+            same_path: false,
+            has_down_route: false,
+            direction: "DOWN",
+            linked_route_id: linkedRouteId,
+            created_at: new Date().toISOString()
+          });
+          
           Alert.alert(
-            "Authentication Required", 
-            "Route saved locally. Please login again to sync with server.",
+            "✅ DOWN Route Created!",
+            "DOWN route has been successfully created and linked to the UP route.",
             [
               {
                 text: "OK",
                 onPress: () => {
-                  // Optionally logout user or show login prompt
-                  // handleLogout();
+                  // Navigate to saved routes
+                  navigation.navigate("SavedRoutes");
                 }
               }
             ]
           );
-        } else {
-          Alert.alert(
-            "Server Sync Failed", 
-            "Route saved locally but could not sync with server: " + serverError.message
-          );
+          
+          // Clear form
+          handleClearRoute();
+          // Reset to default state
+          setRouteMode('same');
+          setDirection('UP');
+          setLinkedRouteId(null);
         }
       }
-      
-      // Clear form on success
-      setStops([]);
-      setUpRouteName("");
-      setDownRouteName("");
-      setStopName("");
-      setArrivalTime("");
-      setDownDepartureTime("");
-      setBusPosition(null);
-      setSource("");
-      setDestination("");
-      
+
     } catch (error) {
       console.error("Error saving route:", error);
-      Alert.alert(
-        "Save Error", 
-        "Error saving route locally. Please try again."
-      );
+      const errorMessage = error.message || "Failed to save route. Please try again.";
+      
+      // Check for specific error messages
+      if (error.message?.includes('Authentication failed') || error.message?.includes('401')) {
+        Alert.alert(
+          "Authentication Required", 
+          "Please login again to save routes.",
+          [
+            {
+              text: "OK",
+              onPress: () => handleLogout()
+            }
+          ]
+        );
+      } else if (error.message?.includes('linked_route_id')) {
+        Alert.alert("Payload Error", "Don't use linked_route_id. Use route_id for DOWN route.");
+      } else if (error.message?.includes('route_name')) {
+        Alert.alert("Payload Error", "Don't use route_name. Use up_route_name for UP route and down_route_name for DOWN route.");
+      } else if (error.message?.includes('direction')) {
+        Alert.alert("Payload Error", "Direction must be 'UP' or 'DOWN' (uppercase).");
+      } else {
+        Alert.alert("Save Error", errorMessage);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -339,6 +539,13 @@ export default function MapScreen({ setIsAuthenticated }) {
     setSource("");
     setDestination("");
     if (intervalRef.current) clearInterval(intervalRef.current);
+    
+    // Only reset mode if not coming from navigation
+    if (!route.params?.mode) {
+      setRouteMode('same');
+      setDirection('UP');
+      setLinkedRouteId(null);
+    }
   };
 
   const handleSimulateRoute = () => {
@@ -399,6 +606,33 @@ export default function MapScreen({ setIsAuthenticated }) {
     setStops(updatedStops);
   };
 
+  // Handle route mode change
+  const handleRouteModeChange = (newMode) => {
+    if (isSaving) return;
+
+    if (newMode === 'different') {
+      // Direct switch – NO ALERT
+      setRouteMode('different');
+      setDirection('UP');
+
+      // Clear only form data (NOT mode again)
+      setStops([]);
+      setUpRouteName("");
+      setDownRouteName("");
+      setStopName("");
+      setArrivalTime("");
+      setDownDepartureTime("");
+      setBusPosition(null);
+      setSource("");
+      setDestination("");
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    } else {
+      // Switch back to same path
+      setRouteMode('same');
+      setDirection('UP');
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -449,15 +683,15 @@ export default function MapScreen({ setIsAuthenticated }) {
           )}
         </MapView>
 
-        {/* Saved Routes Button */}
+        {/* Top Left Menu/List Button */}
         <TouchableOpacity 
-          style={[styles.savedRoutesButton, { backgroundColor: Colours.card }]}
+          style={[styles.menuButton, { backgroundColor: Colours.card }]}
           onPress={() => navigation.navigate("SavedRoutes")}
         >
-          <Ionicons name="list" size={24} color={Colours.primary} />
+          <Ionicons name="menu-outline" size={26} color={Colours.primary} />
         </TouchableOpacity>
 
-        {/* Logout Button */}
+        {/* Top Right Logout Button */}
         <TouchableOpacity 
           style={[styles.logoutButton, { backgroundColor: Colours.danger }]}
           onPress={handleLogout}
@@ -499,8 +733,60 @@ export default function MapScreen({ setIsAuthenticated }) {
           >
             {/* Header Section */}
             <View style={[styles.header, { borderBottomColor: Colours.border }]}>
-              <Text style={[styles.headerTitle, { color: Colours.textDark }]}>Create Route</Text>
+              <Text style={[styles.headerTitle, { color: Colours.textDark }]}>
+                {routeMode === 'different' 
+                  ? `${direction === 'UP' ? 'UP' : 'DOWN'} Route Creation`
+                  : 'Create Route'}
+              </Text>
+              
+              {routeMode === 'different' && direction === 'DOWN' && linkedRouteId && (
+                <Text style={[styles.linkedRouteText, { color: Colours.textSecondary }]}>
+                  Linked to UP Route #{linkedRouteId}
+                </Text>
+              )}
             </View>
+
+            {/* Route Mode Toggle - Only show if not in "different" mode from navigation */}
+            {!route.params?.mode && (
+              <View style={[styles.toggleContainer, { 
+                backgroundColor: Colours.card, 
+                borderColor: Colours.border 
+              }]}>
+                <Text style={[styles.toggleLabel, { color: Colours.textDark }]}>Route Path Type:</Text>
+                <View style={styles.toggleWrapper}>
+                  <TouchableOpacity
+                    style={[
+                      styles.toggleOption,
+                      routeMode === 'same' && styles.toggleOptionActive
+                    ]}
+                    onPress={() => handleRouteModeChange('same')}
+                    disabled={isSaving}
+                  >
+                    <Text style={[
+                      styles.toggleText,
+                      routeMode === 'same' && styles.toggleTextActive
+                    ]}>
+                      Same Path
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.toggleOption,
+                      routeMode === 'different' && styles.toggleOptionActive
+                    ]}
+                    onPress={() => handleRouteModeChange('different')}
+                    disabled={isSaving}
+                  >
+                    <Text style={[
+                      styles.toggleText,
+                      routeMode === 'different' && styles.toggleTextActive
+                    ]}>
+                      Different Path
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* All Four Buttons in Horizontal Layout */}
             <View style={styles.buttonsContainer}>
@@ -530,7 +816,7 @@ export default function MapScreen({ setIsAuthenticated }) {
                   />
                 </View>
                 <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>
-                  {isSaving ? "Saving..." : "Save"}
+                  {getSaveButtonText()}
                 </Text>
               </TouchableOpacity>
               
@@ -562,33 +848,51 @@ export default function MapScreen({ setIsAuthenticated }) {
               backgroundColor: Colours.card, 
               borderColor: Colours.border 
             }]}>
-              <Text style={[styles.sectionTitle, { color: Colours.textDark }]}>Route Details</Text>
+              <Text style={[styles.sectionTitle, { color: Colours.textDark }]}>
+                {routeMode === 'different' 
+                  ? `${direction === 'UP' ? 'UP' : 'DOWN'} Route Details`
+                  : 'Route Details'}
+              </Text>
               
-              <TextInput 
-                style={[styles.input, { 
-                  color: Colours.textDark, 
-                  backgroundColor: "#ffffff",
-                  borderColor: Colours.border 
-                }]} 
-                placeholder="Up Route Name (e.g., Sattur to Kcet)" 
-                value={upRouteName} 
-                onChangeText={setUpRouteName} 
-                placeholderTextColor={Colours.textSecondary}
-                editable={!isSaving}
-              />
+              {/* UP Route Name Field - Always show in same mode, or in different mode when direction is UP */}
+              {(routeMode === 'same' || (routeMode === 'different' && direction === 'UP')) && (
+                <TextInput 
+                  style={[styles.input, { 
+                    color: Colours.textDark, 
+                    backgroundColor: "#ffffff",
+                    borderColor: Colours.border 
+                  }]} 
+                  placeholder={
+                    routeMode === 'different' && direction === 'UP'
+                      ? "UP Route (e.g., Sattur to KCET) *"
+                      : "Up Route (e.g., Sattur to KCET)"
+                  }
+                  value={upRouteName} 
+                  onChangeText={setUpRouteName} 
+                  placeholderTextColor={Colours.textSecondary}
+                  editable={!isSaving}
+                />
+              )}
               
-              <TextInput 
-                style={[styles.input, { 
-                  color: Colours.textDark, 
-                  backgroundColor: "#ffffff",
-                  borderColor: Colours.border 
-                }]} 
-                placeholder="Down Route Name (e.g., Kcet to Sattur)" 
-                value={downRouteName} 
-                onChangeText={setDownRouteName} 
-                placeholderTextColor={Colours.textSecondary}
-                editable={!isSaving}
-              />
+              {/* DOWN Route Name Field - Always show in same mode, or in different mode when direction is DOWN */}
+              {(routeMode === 'same' || (routeMode === 'different' && direction === 'DOWN')) && (
+                <TextInput
+                  style={[styles.input, {
+                    color: Colours.textDark,
+                    backgroundColor: "#ffffff",
+                    borderColor: Colours.border
+                  }]}
+                  placeholder={
+                    routeMode === 'different' && direction === 'DOWN'
+                      ? "DOWN Route (e.g., KCET to Sattur) *"
+                      : "Down Route (e.g., KCET to Sattur) *"
+                  }
+                  value={downRouteName}
+                  onChangeText={setDownRouteName}
+                  placeholderTextColor={Colours.textSecondary}
+                  editable={!isSaving}
+                />
+              )}
 
               {/* Source and Destination fields side by side */}
               <View style={styles.rowContainer}>
@@ -599,7 +903,11 @@ export default function MapScreen({ setIsAuthenticated }) {
                       backgroundColor: "#ffffff",
                       borderColor: Colours.border 
                     }]} 
-                    placeholder="Source *" 
+                    placeholder={
+                      routeMode === 'different' && direction === 'DOWN'
+                        ? "DOWN Source *"
+                        : "Source *"
+                    }
                     value={source} 
                     onChangeText={setSource} 
                     placeholderTextColor={Colours.textSecondary}
@@ -613,7 +921,11 @@ export default function MapScreen({ setIsAuthenticated }) {
                       backgroundColor: "#ffffff",
                       borderColor: Colours.border 
                     }]} 
-                    placeholder="Destination *" 
+                    placeholder={
+                      routeMode === 'different' && direction === 'DOWN'
+                        ? "DOWN Destination *"
+                        : "Destination *"
+                    }
                     value={destination} 
                     onChangeText={setDestination} 
                     placeholderTextColor={Colours.textSecondary}
@@ -626,7 +938,7 @@ export default function MapScreen({ setIsAuthenticated }) {
                 style={[styles.input, { 
                   color: Colours.textDark, 
                   backgroundColor: "#ffffff",
-                  borderColor: Colours.border 
+                    borderColor: Colours.border 
                 }]} 
                 placeholder="Stop Name *" 
                 value={stopName} 
@@ -651,24 +963,28 @@ export default function MapScreen({ setIsAuthenticated }) {
                 maxLength={5}
               />
 
-              {/* Departure Time Input */}
-              <TextInput
-                style={[styles.input, { 
-                  color: Colours.textDark, 
-                  backgroundColor: "#ffffff",
-                  borderColor: Colours.border 
-                }]} 
-                placeholder="Departure Time (HH:MM) *" 
-                value={downDepartureTime} 
-                onChangeText={(text) => formatTime(text, setDownDepartureTime)}
-                placeholderTextColor={Colours.textSecondary}
-                editable={!isSaving}
-                keyboardType="numeric"
-                maxLength={5}
-              />
+              {/* Departure Time Input - Only for same path */}
+              {showDownDepartureTime() && (
+                <TextInput
+                  style={[styles.input, { 
+                    color: Colours.textDark, 
+                    backgroundColor: "#ffffff",
+                    borderColor: Colours.border 
+                  }]} 
+                  placeholder="Departure Time (HH:MM) *" 
+                  value={downDepartureTime} 
+                  onChangeText={(text) => formatTime(text, setDownDepartureTime)}
+                  placeholderTextColor={Colours.textSecondary}
+                  editable={!isSaving}
+                  keyboardType="numeric"
+                  maxLength={5}
+                />
+              )}
 
               <Text style={[styles.instructionText, { color: Colours.textSecondary }]}>
-                👉 Tap on the map to add stops (Arrival Time is required)
+                {routeMode === 'different'
+                  ? `👉 Tap on the map to add ${direction === 'UP' ? 'UP' : 'DOWN'} route stops`
+                  : "👉 Tap on the map to add stops (Arrival Time is required)"}
               </Text>
             </View>
 
@@ -680,7 +996,9 @@ export default function MapScreen({ setIsAuthenticated }) {
               }]}>
                 <View style={styles.stopsHeader}>
                   <Text style={[styles.sectionTitle, { color: Colours.textDark }]}>
-                    Route Stops ({stops.length}) - {source || stops[0]?.location_name} to {destination || stops[stops.length - 1]?.location_name}
+                    {routeMode === 'different'
+                      ? `${direction === 'UP' ? 'UP' : 'DOWN'} Route Stops (${stops.length})`
+                      : `Route Stops (${stops.length})`}
                   </Text>
                   <TouchableOpacity 
                     style={[styles.deleteAllButton, { backgroundColor: "#ffe6e6" }]}
@@ -759,6 +1077,78 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "bold",
     textAlign: "center",
+  },
+  linkedRouteText: {
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+  toggleContainer: {
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  toggleWrapper: {
+    flexDirection: "row",
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+    padding: 2,
+  },
+  toggleOption: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  toggleOptionActive: {
+    backgroundColor: "#FFD700",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  toggleTextActive: {
+    color: "#000",
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  infoText: {
+    fontSize: 12,
+    marginLeft: 8,
+    flex: 1,
+  },
+  infoHighlight: {
+    fontWeight: 'bold',
   },
   buttonsContainer: {
     flexDirection: "row",
@@ -843,7 +1233,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
   },
-  // Styles for side-by-side inputs
   rowContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -969,11 +1358,10 @@ const styles = StyleSheet.create({
     elevation: 8,
     borderWidth: 2,
   },
-  // Saved Routes Button
-  savedRoutesButton: {
+  menuButton: {
     position: "absolute",
     top: 50,
-    right: 20,
+    left: 20,
     width: 50,
     height: 50,
     borderRadius: 25,
@@ -989,10 +1377,9 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 8,
   },
-  // Logout button
   logoutButton: {
     position: "absolute",
-    top: 110,
+    top: 50,
     right: 20,
     width: 50,
     height: 50,

@@ -111,12 +111,12 @@ export default function LoginScreen({ setIsAuthenticated }) {
       setIsAuthenticated(true);
       
     } catch (error) {
-      console.error('Login error:', error);
       shakePasswordField();
-      setPasswordError(error.message || "Login failed. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
+      setPasswordError("Invalid email or password"); // Fixed message
+} finally {
+  setIsLoading(false);
+}
+
   };
 
   const handleEmailChange = (text) => {
@@ -255,7 +255,7 @@ export default function LoginScreen({ setIsAuthenticated }) {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>© 2024 YUS Bus Management System</Text>
+          <Text style={styles.footerText}>© 2025 YUS Bus Management System</Text>
           <Text style={styles.footerSubtext}>Secure Admin Portal v1.0</Text>
         </View>
       </View>
