@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as Location from "expo-location";
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { Linking } from "react-native";
 import {
   Alert,
   Dimensions,
@@ -12,14 +12,15 @@ import {
   TouchableOpacity,
   View,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ScrollView
 } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
 import { 
   clearSession, 
   send_route_to_server, 
-  saveDifferentPathRoute,
-  fetchRouteById 
+  saveDifferentPathRoute
 } from "../utils/Api";
 import { saveRoute, getSavedRoutes } from "../utils/storage";
 
@@ -49,14 +50,11 @@ export default function MapScreen({ setIsAuthenticated }) {
   const [upRouteName, setUpRouteName] = useState("");
   const [downRouteName, setDownRouteName] = useState("");
   const [stopName, setStopName] = useState("");
-  const [busPosition, setBusPosition] = useState(null);
   const [arrivalTime, setArrivalTime] = useState("");
   const [downDepartureTime, setDownDepartureTime] = useState("");
-  const [sheetIndex, setSheetIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [source, setSource] = useState("");
   const [destination, setDestination] = useState("");
-  const intervalRef = useRef(null);
 
   // New states for different path feature
   const [routeMode, setRouteMode] = useState('same'); // 'same' or 'different'
@@ -64,11 +62,32 @@ export default function MapScreen({ setIsAuthenticated }) {
   const [linkedRouteId, setLinkedRouteId] = useState(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
 
+  // New state for drawer
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   // Get navigation params
   const { routeId, mode, direction: navDirection } = route.params || {};
 
-  const sheetRef = useRef(null);
-  const snapPoints = useMemo(() => ["25%", "50%","75%","90%","100%"], []);
+  // ✅ RESET FORM DATA FUNCTION - SINGLE SOURCE OF TRUTH
+  const resetFormData = () => {
+    setStops([]);
+    setUpRouteName("");
+    setDownRouteName("");
+    setStopName("");
+    setArrivalTime("");
+    setDownDepartureTime("");
+    setSource("");
+    setDestination("");
+  };
+
+  // ✅ EXTRA SAFETY: Force clear when routeMode changes
+  useEffect(() => {
+    // Clear form data when switching modes (except when initializing from nav params)
+    if (routeMode && !route.params?.mode) {
+      resetFormData();
+      setLinkedRouteId(null);
+    }
+  }, [routeMode]);
 
   // Initialize from navigation params
   useEffect(() => {
@@ -77,10 +96,19 @@ export default function MapScreen({ setIsAuthenticated }) {
       setDirection(navDirection);
       setLinkedRouteId(routeId);
       
+      // Clear any existing data first
+      resetFormData();
+      
       // If we have a routeId, load the existing UP route data for reference
       if (routeId && navDirection === 'DOWN') {
         loadUpRouteData(routeId);
       }
+    } else {
+      // Clear any stale data from previous sessions
+      resetFormData();
+      setRouteMode('same');
+      setDirection('UP');
+      setLinkedRouteId(null);
     }
   }, [mode, navDirection, routeId]);
 
@@ -132,8 +160,8 @@ export default function MapScreen({ setIsAuthenticated }) {
     return "Save Route";
   };
 
-  // Logout function
-  const handleLogout = () => {
+  // ✅ UPDATED: Logout function with API call
+  const handleLogout = async () => {
     Alert.alert(
       "Logout",
       "Are you sure you want to logout?",
@@ -143,54 +171,56 @@ export default function MapScreen({ setIsAuthenticated }) {
           text: "Logout", 
           style: "destructive",
           onPress: async () => {
-            await clearSession();
-            setIsAuthenticated(false);
+            try {
+              // 🔥 Call backend logout endpoint
+              const sessionId = await SecureStore.getItemAsync('session_id');
+                
+              const headers = {
+                "Content-Type": "application/json",
+              };
+              
+              // Add Authorization header if session_id exists
+              if (sessionId) {
+                headers["Authorization"] = sessionId;
+              }
+          
+              const response = await fetch("https://yus.kwscloud.in/yus/admin-logout", {
+                method: "DELETE",
+                headers: headers,
+              });
+            } catch (err) {
+              console.warn("Logout API failed, clearing local session anyway");
+            } finally {
+              // 🔐 Always clear local session
+              await clearSession();
+              setIsAuthenticated(false);
+            }
           }
         }
       ]
     );
   };
 
-  const handleMapPress = (e) => {
-    if (sheetIndex === 2) return;
-    
-    if (!stopName.trim()) {
-      Alert.alert("Error", "Please enter a stop name first.");
-      return;
-    }
+  // ✅ UPDATED: CORRECT HANDLE ROUTE MODE CHANGE
+  const handleRouteModeChange = (newMode) => {
+    if (isSaving) return;
 
-    if (!arrivalTime.trim()) {
-      Alert.alert("Error", "Please enter arrival time for this stop.");
-      return;
-    }
+    // 🔥 IMPORTANT: RESET ALL FORM DATA FIRST
+    resetFormData();
 
-    if (!validateTime(arrivalTime)) {
-      Alert.alert("Invalid Time", "Please enter arrival time in HH:MM format (e.g., 09:30)");
-      return;
+    if (newMode === 'different') {
+      setRouteMode('different');
+      setDirection('UP');
+      setLinkedRouteId(null);
+    } else {
+      setRouteMode('same');
+      setDirection('UP');
+      setLinkedRouteId(null);
     }
-
-    const newStop = {
-      stop_sequence: stops.length + 1,
-      location_name: stopName.trim(),
-      lat: e.nativeEvent.coordinate.latitude.toString(),
-      lon: e.nativeEvent.coordinate.longitude.toString(),
-      is_stop: true,
-      arrival_time: arrivalTime.trim(),
-    };
-    setStops([...stops, newStop]);
-    setStopName("");
-    setArrivalTime("");
   };
 
-  const handleLocateMe = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission denied", "Enable location permissions.");
-      return;
-    }
-
-    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-
+  // Add stop via button (replaces map tap)
+  const handleAddStop = async () => {
     if (!stopName.trim()) {
       Alert.alert("Error", "Please enter a stop name first.");
       return;
@@ -206,17 +236,44 @@ export default function MapScreen({ setIsAuthenticated }) {
       return;
     }
 
-    const newStop = {
-      stop_sequence: stops.length + 1,
-      location_name: stopName.trim(),
-      lat: loc.coords.latitude.toString(),
-      lon: loc.coords.longitude.toString(),
-      is_stop: true,
-      arrival_time: arrivalTime.trim(),
-    };
-    setStops([...stops, newStop]);
-    setStopName("");
-    setArrivalTime("");
+    try {
+      // 1️⃣ Ask location permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== "granted") {
+        Alert.alert(
+          "Location Permission Required",
+          "Please allow location access to mark stop location."
+        );
+        return;
+      }
+
+      // 2️⃣ Get current phone location
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const latitude = location.coords.latitude;
+      const longitude = location.coords.longitude;
+
+      // 3️⃣ Create stop with REAL coordinates
+      const newStop = {
+        stop_sequence: stops.length + 1,
+        location_name: stopName.trim(),
+        lat: latitude.toString(),
+        lon: longitude.toString(),
+        is_stop: true,
+        arrival_time: arrivalTime.trim(),
+      };
+
+      setStops([...stops, newStop]);
+      setStopName("");
+      setArrivalTime("");
+
+    } catch (error) {
+      console.error("GPS error:", error);
+      Alert.alert("Error", "Unable to fetch location. Turn ON GPS and try again.");
+    }
   };
 
   // Delete a single stop
@@ -262,8 +319,6 @@ export default function MapScreen({ setIsAuthenticated }) {
           style: "destructive",
           onPress: () => {
             setStops([]);
-            setBusPosition(null);
-            if (intervalRef.current) clearInterval(intervalRef.current);
           }
         }
       ]
@@ -353,7 +408,7 @@ export default function MapScreen({ setIsAuthenticated }) {
         Alert.alert("Success", "Route saved successfully!");
 
         // Clear form
-        handleClearRoute();
+        resetFormData();
         
       } else {
         // DIFFERENT PATH LOGIC
@@ -405,20 +460,13 @@ export default function MapScreen({ setIsAuthenticated }) {
                   text: "Create DOWN Route", 
                   onPress: () => {
                     // Clear form but keep UP route info for reference
-                    setStops([]);
-                    setStopName("");
-                    setArrivalTime("");
-                    setBusPosition(null);
-                    setSource("");
-                    setDestination("");
-                    setDownRouteName(""); // Clear down route name
+                    resetFormData();
                     // Switch to DOWN direction
                     setDirection('DOWN');
                   }
                 }
               ]
-            );
-            
+            );            
           } else {
             throw new Error(res.message || "Failed to create UP route");
           }
@@ -457,7 +505,6 @@ export default function MapScreen({ setIsAuthenticated }) {
             };
             
             // Save updated routes
-            const { saveRoute } = require("../utils/storage");
             await saveRoute(updatedRoutes);
           }
           
@@ -488,10 +535,8 @@ export default function MapScreen({ setIsAuthenticated }) {
               }
             ]
           );
-          
-          // Clear form
-          handleClearRoute();
-          // Reset to default state
+          // Clear form and reset
+          resetFormData();
           setRouteMode('same');
           setDirection('UP');
           setLinkedRouteId(null);
@@ -528,76 +573,6 @@ export default function MapScreen({ setIsAuthenticated }) {
     }
   };
 
-  const handleClearRoute = () => {
-    setStops([]);
-    setUpRouteName("");
-    setDownRouteName("");
-    setStopName("");
-    setArrivalTime("");
-    setDownDepartureTime("");
-    setBusPosition(null);
-    setSource("");
-    setDestination("");
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    
-    // Only reset mode if not coming from navigation
-    if (!route.params?.mode) {
-      setRouteMode('same');
-      setDirection('UP');
-      setLinkedRouteId(null);
-    }
-  };
-
-  const handleSimulateRoute = () => {
-    if (stops.length < 2) {
-      Alert.alert("Error", "Need at least 2 stops to simulate.");
-      return;
-    }
-
-    let index = 0;
-    setBusPosition({
-      latitude: parseFloat(stops[0].lat),
-      longitude: parseFloat(stops[0].lon),
-    });
-
-    if (intervalRef.current) clearInterval(intervalRef.current);
-
-    intervalRef.current = setInterval(() => {
-      if (index < stops.length - 1) {
-        const start = {
-          latitude: parseFloat(stops[index].lat),
-          longitude: parseFloat(stops[index].lon),
-        };
-        const end = {
-          latitude: parseFloat(stops[index + 1].lat),
-          longitude: parseFloat(stops[index + 1].lon),
-        };
-
-        let step = 0;
-        const totalSteps = 20;
-
-        const move = setInterval(() => {
-          step++;
-          const lat = start.latitude + ((end.latitude - start.latitude) / totalSteps) * step;
-          const lng = start.longitude + ((end.longitude - start.longitude) / totalSteps) * step;
-
-          setBusPosition({ latitude: lat, longitude: lng });
-
-          if (step >= totalSteps) {
-            clearInterval(move);
-            index++;
-          }
-        }, 300);
-      } else {
-        clearInterval(intervalRef.current);
-      }
-    }, 7000);
-  };
-
-  const handleSheetChange = (index) => {
-    setSheetIndex(index);
-  };
-
   // Toggle is_stop for a stop
   const toggleStopType = (index) => {
     const updatedStops = stops.map((stop, i) => 
@@ -606,137 +581,43 @@ export default function MapScreen({ setIsAuthenticated }) {
     setStops(updatedStops);
   };
 
-  // Handle route mode change
-  const handleRouteModeChange = (newMode) => {
-    if (isSaving) return;
-
-    if (newMode === 'different') {
-      // Direct switch – NO ALERT
-      setRouteMode('different');
-      setDirection('UP');
-
-      // Clear only form data (NOT mode again)
-      setStops([]);
-      setUpRouteName("");
-      setDownRouteName("");
-      setStopName("");
-      setArrivalTime("");
-      setDownDepartureTime("");
-      setBusPosition(null);
-      setSource("");
-      setDestination("");
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    } else {
-      // Switch back to same path
-      setRouteMode('same');
-      setDirection('UP');
-    }
-  };
-
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1 }}
-    >
-      <View style={{ flex: 1, backgroundColor: Colours.background }}>
-        {/* Map - Always visible in background */}
-        <MapView
-          style={{ flex: 1 }}
-          initialRegion={{ 
-            latitude: 9.917, 
-            longitude: 78.119, 
-            latitudeDelta: 0.2, 
-            longitudeDelta: 0.2 
-          }}
-          onPress={handleMapPress}
-          showsUserLocation={true}
-          showsMyLocationButton={false}
-        >
-          {stops.map((stop, idx) => (
-            <Marker
-              key={idx}
-              coordinate={{ 
-                latitude: parseFloat(stop.lat), 
-                longitude: parseFloat(stop.lon) 
-              }}
-              title={`${stop.stop_sequence}. ${stop.location_name}`}
-              description={stop.is_stop ? `Bus Stop - Arrival: ${stop.arrival_time}` : `Passing Point - Arrival: ${stop.arrival_time}`}
-              pinColor={stop.is_stop ? Colours.primary : Colours.secondary}
-            />
-          ))}
-          {stops.length > 1 && (
-            <Polyline
-              coordinates={stops.map((s) => ({ 
-                latitude: parseFloat(s.lat), 
-                longitude: parseFloat(s.lon) 
-              }))}
-              strokeColor={Colours.primary}
-              strokeWidth={4}
-            />
-          )}
-          {busPosition && (
-            <Marker coordinate={busPosition}>
-              <View style={[styles.busMarker, { borderColor: Colours.primary }]}>
-                <Text style={{ fontSize: 24 }}>🚌</Text>
-              </View>
-            </Marker>
-          )}
-        </MapView>
+    <SafeAreaView style={{ flex: 1, backgroundColor: Colours.background }}>
+      <StatusBar style="dark" />
+      
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <View style={{ flex: 1, backgroundColor: Colours.background }}>
+          {/* Top Left Menu/List Button */}
+          <TouchableOpacity 
+            style={[styles.menuButton, { backgroundColor: Colours.card }]}
+            onPress={() => setDrawerOpen(true)}
+          >
+            <Ionicons name="menu-outline" size={26} color={Colours.primary} />
+          </TouchableOpacity>
 
-        {/* Top Left Menu/List Button */}
-        <TouchableOpacity 
-          style={[styles.menuButton, { backgroundColor: Colours.card }]}
-          onPress={() => navigation.navigate("SavedRoutes")}
-        >
-          <Ionicons name="menu-outline" size={26} color={Colours.primary} />
-        </TouchableOpacity>
-
-        {/* Top Right Logout Button */}
-        <TouchableOpacity 
-          style={[styles.logoutButton, { backgroundColor: Colours.danger }]}
-          onPress={handleLogout}
-        >
-          <Ionicons name="log-out-outline" size={24} color="white" />
-        </TouchableOpacity>
-
-        {/* BottomSheet */}
-        <BottomSheet
-          ref={sheetRef}
-          index={0}
-          snapPoints={snapPoints}
-          onChange={handleSheetChange}
-          enablePanDownToClose={false}
-          handleIndicatorStyle={{
-            backgroundColor: Colours.primary,
-            width: 40,
-            height: 4,
-            borderRadius: 2,
-          }}
-          backgroundStyle={{ 
-            backgroundColor: Colours.card, 
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            shadowColor: "#000",
-            shadowOffset: {
-              width: 0,
-              height: -2,
-            },
-            shadowOpacity: 0.3,
-            shadowRadius: 5,
-            elevation: 8,
-          }}
-        >
-          <BottomSheetScrollView 
-            style={[styles.sheetContent, { backgroundColor: Colours.background }]}
-            contentContainerStyle={styles.sheetContentContainer}
+          {/* Fixed ScrollView instead of BottomSheet */}
+          <ScrollView
+            style={{ flex: 1, backgroundColor: Colours.background }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
             showsVerticalScrollIndicator={false}
           >
-            {/* Header Section */}
+            {/* Header Section with Direction Icon */}
             <View style={[styles.header, { borderBottomColor: Colours.border }]}>
               <Text style={[styles.headerTitle, { color: Colours.textDark }]}>
-                {routeMode === 'different' 
-                  ? `${direction === 'UP' ? 'UP' : 'DOWN'} Route Creation`
-                  : 'Create Route'}
+                {routeMode === 'different'
+                  ? (
+                    <>
+                      <Ionicons
+                        name={direction === "UP" ? "arrow-up-circle-outline" : "arrow-down-circle-outline"}
+                        size={22}
+                      />{" "}
+                      {direction === "UP" ? "UP Route Creation" : "DOWN Route Creation"}
+                    </>
+                  )
+                  : "Create Route"}
               </Text>
               
               {routeMode === 'different' && direction === 'DOWN' && linkedRouteId && (
@@ -762,13 +643,21 @@ export default function MapScreen({ setIsAuthenticated }) {
                     onPress={() => handleRouteModeChange('same')}
                     disabled={isSaving}
                   >
-                    <Text style={[
-                      styles.toggleText,
-                      routeMode === 'same' && styles.toggleTextActive
-                    ]}>
+                    <Ionicons
+                      name="swap-horizontal-outline"
+                      size={18}
+                      color={routeMode === 'same' ? "#000" : "#666"}
+                    />
+                    <Text
+                      style={[
+                        styles.toggleText,
+                        routeMode === 'same' && styles.toggleTextActive
+                      ]}
+                    >
                       Same Path
                     </Text>
                   </TouchableOpacity>
+
                   <TouchableOpacity
                     style={[
                       styles.toggleOption,
@@ -777,71 +666,23 @@ export default function MapScreen({ setIsAuthenticated }) {
                     onPress={() => handleRouteModeChange('different')}
                     disabled={isSaving}
                   >
-                    <Text style={[
-                      styles.toggleText,
-                      routeMode === 'different' && styles.toggleTextActive
-                    ]}>
+                    <Ionicons
+                      name="git-branch-outline"
+                      size={18}
+                      color={routeMode === 'different' ? "#000" : "#666"}
+                    />
+                    <Text
+                      style={[
+                        styles.toggleText,
+                        routeMode === 'different' && styles.toggleTextActive
+                      ]}
+                    >
                       Different Path
                     </Text>
                   </TouchableOpacity>
                 </View>
               </View>
             )}
-
-            {/* All Four Buttons in Horizontal Layout */}
-            <View style={styles.buttonsContainer}>
-              <TouchableOpacity 
-                style={styles.buttonWrapper} 
-                onPress={handleLocateMe}
-                disabled={isSaving}
-              >
-                <View style={[styles.buttonIcon, { backgroundColor: Colours.accent }]}>
-                  <Ionicons name="locate" size={24} color="white" />
-                </View>
-                <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>Locate Me</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.buttonWrapper} 
-                onPress={handleSaveRoute}
-                disabled={isSaving}
-              >
-                <View style={[styles.buttonIcon, { 
-                  backgroundColor: isSaving ? Colours.textSecondary : Colours.primary 
-                }]}>
-                  <Ionicons 
-                    name={isSaving ? "hourglass" : "save"} 
-                    size={24} 
-                    color="white" 
-                  />
-                </View>
-                <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>
-                  {getSaveButtonText()}
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.buttonWrapper} 
-                onPress={handleClearRoute}
-                disabled={isSaving}
-              >
-                <View style={[styles.buttonIcon, { backgroundColor: Colours.danger }]}>
-                  <Ionicons name="trash" size={24} color="white" />
-                </View>
-                <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>Clear</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.buttonWrapper} 
-                onPress={handleSimulateRoute}
-                disabled={isSaving}
-              >
-                <View style={[styles.buttonIcon, { backgroundColor: Colours.warning }]}>
-                  <Ionicons name="bus" size={24} color="white" />
-                </View>
-                <Text style={[styles.buttonLabel, { color: Colours.textSecondary }]}>Simulate</Text>
-              </TouchableOpacity>
-            </View>
 
             {/* Form Section */}
             <View style={[styles.formSection, { 
@@ -938,7 +779,7 @@ export default function MapScreen({ setIsAuthenticated }) {
                 style={[styles.input, { 
                   color: Colours.textDark, 
                   backgroundColor: "#ffffff",
-                    borderColor: Colours.border 
+                  borderColor: Colours.border 
                 }]} 
                 placeholder="Stop Name *" 
                 value={stopName} 
@@ -981,10 +822,43 @@ export default function MapScreen({ setIsAuthenticated }) {
                 />
               )}
 
+              {/* ✅ FIX 2: Add Stop & Save Route Buttons - Perfect Alignment */}
+              <View style={styles.actionRow}>
+                {/* Add Stop Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    { backgroundColor: Colours.primary }
+                  ]}
+                  onPress={handleAddStop}
+                  disabled={isSaving}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color="#000" />
+                  <Text style={styles.actionButtonTextDark}>
+                    Add Stop
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Save Route Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    { backgroundColor: isSaving ? Colours.textSecondary : Colours.success }
+                  ]}
+                  onPress={handleSaveRoute}
+                  disabled={isSaving}
+                >
+                  <Ionicons name="save-outline" size={20} color="#fff" />
+                  <Text style={styles.actionButtonTextLight}>
+                    {getSaveButtonText()}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               <Text style={[styles.instructionText, { color: Colours.textSecondary }]}>
                 {routeMode === 'different'
-                  ? `👉 Tap on the map to add ${direction === 'UP' ? 'UP' : 'DOWN'} route stops`
-                  : "👉 Tap on the map to add stops (Arrival Time is required)"}
+                  ? `👉 Add stops for ${direction === 'UP' ? 'UP' : 'DOWN'} route then Save`
+                  : "👉 Add stops (Arrival Time required) then Save Route"}
               </Text>
             </View>
 
@@ -1031,7 +905,7 @@ export default function MapScreen({ setIsAuthenticated }) {
                           </TouchableOpacity>
                         </View>
                         <Text style={[styles.stopCoordinates, { color: Colours.textSecondary }]}>
-                          {parseFloat(stop.lat).toFixed(4)}, {parseFloat(stop.lon).toFixed(4)}
+                          Coordinates: {stop.lat}, {stop.lon}
                         </Text>
                         <Text style={[styles.arrivalTime, { color: Colours.primary }]}>
                           🕒 Arrival: {stop.arrival_time}
@@ -1053,13 +927,88 @@ export default function MapScreen({ setIsAuthenticated }) {
                 ))}
               </View>
             )}
-          </BottomSheetScrollView>
-        </BottomSheet>
-      </View>
-    </KeyboardAvoidingView>
+          </ScrollView>
+
+          {/* Custom Drawer Overlay - LEFT SIDE */}
+          {drawerOpen && (
+            <View style={styles.drawerOverlay}>
+              {/* LEFT drawer */}
+              <View style={styles.drawerContainer}>
+                <Text style={styles.drawerTitle}>Yus Route</Text>
+
+                <TouchableOpacity
+                  style={styles.drawerItem}
+                  onPress={() => {
+                    setDrawerOpen(false);
+                  }}
+                >
+                  <Ionicons name="home-outline" size={20} />
+                  <Text style={styles.drawerText}>Home</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.drawerItem}
+                  onPress={() => {
+                    setDrawerOpen(false);
+                    navigation.navigate("SavedRoutes");
+                  }}
+                >
+                  <Ionicons name="bus-outline" size={20} />
+                  <Text style={styles.drawerText}>Saved Routes</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.drawerItem}
+                  onPress={() => {
+                    setDrawerOpen(false);
+                    Linking.openURL("https://yus.kwscloud.in/");
+                  }}
+                >
+                  <Ionicons name="information-circle-outline" size={20} />
+                  <Text style={styles.drawerText}>About</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.drawerItem}
+                  onPress={() => {
+                    setDrawerOpen(false);
+                    Linking.openURL("https://yus.kwscloud.in/yus/privacy-policy");
+                  }}
+                >
+                  <Ionicons name="shield-checkmark-outline" size={20} />
+                  <Text style={styles.drawerText}>Privacy Policy</Text>
+                </TouchableOpacity>
+
+                <View style={styles.drawerDivider} />
+
+                <TouchableOpacity
+                  style={[styles.drawerItem, { marginTop: 10 }]}
+                  onPress={() => {
+                    setDrawerOpen(false);
+                    handleLogout();
+                  }}
+                >
+                  <Ionicons name="log-out-outline" size={20} color={Colours.danger} />
+                  <Text style={[styles.drawerText, { color: Colours.danger }]}>
+                    Logout
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Backdrop */}
+              <TouchableOpacity
+                style={styles.drawerBackdrop}
+                onPress={() => setDrawerOpen(false)}
+              />
+            </View>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
+// Styles (updated for new layout)
 const styles = StyleSheet.create({
   sheetContent: {
     flex: 1,
@@ -1111,9 +1060,11 @@ const styles = StyleSheet.create({
   },
   toggleOption: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 6,
     alignItems: "center",
+    justifyContent: "center",
+    gap: 6, // 👈 icon + text spacing
   },
   toggleOptionActive: {
     backgroundColor: "#FFD700",
@@ -1149,38 +1100,6 @@ const styles = StyleSheet.create({
   },
   infoHighlight: {
     fontWeight: 'bold',
-  },
-  buttonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-    paddingHorizontal: 8,
-  },
-  buttonWrapper: {
-    alignItems: "center",
-    justifyContent: "center",
-    flex: 1,
-  },
-  buttonIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 6,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  buttonLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    textAlign: "center",
   },
   formSection: {
     marginBottom: 20,
@@ -1340,27 +1259,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
   },
+  
   deleteButton: {
     padding: 4,
     marginLeft: 8,
   },
-  busMarker: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 20,
-    padding: 6,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
-    elevation: 8,
-    borderWidth: 2,
-  },
+
   menuButton: {
     position: "absolute",
-    top: 50,
+    top: 10,
     left: 20,
     width: 50,
     height: 50,
@@ -1377,23 +1284,92 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 8,
   },
-  logoutButton: {
-    position: "absolute",
-    top: 50,
-    right: 20,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: "center",
+  
+  // ✅ NEW STYLES FOR FIX 2
+  actionRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 10,
+    marginBottom: 14,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: "row",
     alignItems: "center",
-    zIndex: 1000,
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    elevation: 4,
+  },
+  actionButtonTextDark: {
+    fontWeight: "bold",
+    color: "#000",
+    fontSize: 14,
+  },
+  actionButtonTextLight: {
+    fontWeight: "bold",
+    color: "#fff",
+    fontSize: 14,
+  },
+
+  // Drawer styles - LEFT SIDE with premium look
+  drawerOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2000,
+    flexDirection: "row",
+  },
+
+  drawerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+
+  drawerContainer: {
+    width: 280,
+    backgroundColor: "#ffffff",
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
-    elevation: 8,
+    shadowOffset: { width: 3, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 12,
+  },
+
+  drawerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 24,
+    textAlign: "left",
+  },
+
+  drawerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginBottom: 6,
+    backgroundColor: "#f8f9fa",
+  },
+
+  drawerText: {
+    fontSize: 15,
+    fontWeight: "500",
+    marginLeft: 12,
+  },
+
+  drawerDivider: {
+    height: 1,
+    backgroundColor: "#eee",
+    marginVertical: 16,
   },
 });

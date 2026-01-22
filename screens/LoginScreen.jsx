@@ -152,7 +152,7 @@ export default function LoginScreen({ setIsAuthenticated }) {
               resizeMode="contain"
             />
           </View>
-          <Text style={styles.title}>YUS Route Manager</Text>
+          <Text style={styles.title}>YUS Route </Text>
           <Text style={styles.subtitle}>Administrative Portal</Text>
         </View>
 

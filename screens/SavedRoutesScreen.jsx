@@ -5,22 +5,24 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  RefreshControl
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import { 
-  send_route_to_server, 
-  createUpRoute, 
-  createDownRoute,
-  deleteRouteFromServer,
-  fetchAllRoutes 
+import {
+  saveDifferentPathRoute,
+  send_route_to_server
 } from "../utils/Api";
-import { saveRoute,clearAllRoutes, deleteRoute, getSavedRoutes } from "../utils/storage";
+import {
+  clearAllRoutes,
+  deleteRoute,
+  getSavedRoutes,
+  saveRoute,
+} from "../utils/storage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -37,13 +39,13 @@ const Colours = {
   textSecondary: "#666666",
   background: "#ffffff",
   card: "#f8f9fa",
-  border: "#e0e0e0"
+  border: "#e0e0e0",
 };
 
 export default function SavedRoutesScreen({ setIsAuthenticated }) {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
-  
+
   const [savedRoutes, setSavedRoutes] = useState([]);
   const [loadingRoutes, setLoadingRoutes] = useState({});
   const [refreshing, setRefreshing] = useState(false);
@@ -54,56 +56,50 @@ export default function SavedRoutesScreen({ setIsAuthenticated }) {
       loadSavedRoutes();
     }
   }, [isFocused]);
-const loadSavedRoutes = async () => {
-  try {
-    const localRoutes = await getSavedRoutes();
+  const loadSavedRoutes = async () => {
+    try {
+      const localRoutes = await getSavedRoutes();
 
-    // ❌ REMOVE any route with 0 stops (UP / DOWN / SAME PATH)
-    const cleanedRoutes = localRoutes.filter(route => {
-      return Array.isArray(route.stops) && route.stops.length > 0;
-    });
+      // ❌ REMOVE any route with 0 stops (UP / DOWN / SAME PATH)
+      const cleanedRoutes = localRoutes.filter((route) => {
+        return Array.isArray(route.stops) && route.stops.length > 0;
+      });
 
-    // 🔥 rewrite storage only if something was removed
-    if (cleanedRoutes.length !== localRoutes.length) {
-      await clearAllRoutes();
-      for (const r of cleanedRoutes) {
-        await saveRoute(r);
+      // 🔥 rewrite storage only if something was removed
+      if (cleanedRoutes.length !== localRoutes.length) {
+        await clearAllRoutes();
+        for (const r of cleanedRoutes) {
+          await saveRoute(r);
+        }
+      }
+
+      setSavedRoutes(cleanedRoutes);
+      checkDownRouteStatus(cleanedRoutes);
+    } catch (error) {
+      console.error("Error loading saved routes:", error);
+      Alert.alert("Error", "Failed to load saved routes.");
+    }
+  };
+
+  const checkDownRouteStatus = (routes) => {
+    const status = {};
+
+    for (const route of routes) {
+      const isSamePath = route.same_path === true || route.same_path === "true";
+      const direction = route.direction?.toUpperCase();
+      const isUpRoute = direction === "UP";
+
+      if (!isSamePath && isUpRoute && route.id) {
+        status[route.id] = routes.some(
+          (r) =>
+            r.direction?.toUpperCase() === "DOWN" &&
+            r.linked_route_id === route.id,
+        );
       }
     }
 
-    setSavedRoutes(cleanedRoutes);
-    checkDownRouteStatus(cleanedRoutes);
-
-  } catch (error) {
-    console.error("Error loading saved routes:", error);
-    Alert.alert("Error", "Failed to load saved routes.");
-  }
-};
-
-
-
-const checkDownRouteStatus = (routes) => {
-  const status = {};
-
-  for (const route of routes) {
-    const isSamePath = route.same_path === true || route.same_path === "true";
-    const direction = route.direction?.toUpperCase();
-    const isUpRoute = direction === "UP";
-
-    if (!isSamePath && isUpRoute && route.id) {
-      status[route.id] = routes.some(
-        r =>
-          r.direction?.toUpperCase() === "DOWN" &&
-          r.linked_route_id === route.id
-      );
-    }
-  }
-
-  setDownRouteStatus(status);
-};
-
- 
-
+    setDownRouteStatus(status);
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -114,66 +110,65 @@ const checkDownRouteStatus = (routes) => {
   // Updated handleSaveToServer to support different path routes
   const handleSaveToServer = async (route) => {
     try {
-      setLoadingRoutes(prev => ({ ...prev, [route.id]: true }));
-      
-      console.log('Saving route to server:', {
+      setLoadingRoutes((prev) => ({ ...prev, [route.id]: true }));
+
+      console.log("Saving route to server:", {
         route_name: route.route_name || route.up_route_name,
         same_path: route.same_path,
         direction: route.direction,
-        stops: route.stops?.length || 0
+        stops: route.stops?.length || 0,
       });
-      
+
       let result;
-      
+
       if (route.same_path === true || route.same_path === undefined) {
         // Same path route
         result = await send_route_to_server(route);
       } else if (route.same_path === false) {
         // Different path route
-        if (route.direction === 'UP') {
-          result = await createUpRoute(route);
+        if (route.direction === "UP") {
+          result = await saveDifferentPathRoute(route);
           // Update the route ID if it's returned from server
           if (result.route_id) {
             // You might want to update the local storage with the server ID
           }
-        } else if (route.direction === 'DOWN') {
+        } else if (route.direction === "DOWN") {
           if (route.linked_route_id) {
-            result = await createDownRoute(route, route.linked_route_id);
+            result = await saveDifferentPathRoute(route, route.linked_route_id);
           } else {
             throw new Error("Linked route ID is required for DOWN route");
           }
         }
       }
-      
+
       Alert.alert("✅ Success", "Route saved to server successfully!");
-      console.log('Server response:', result);
-      
+      console.log("Server response:", result);
     } catch (error) {
-      console.error('Error saving route to server:', error);
-      
-      if (error.message?.includes('Authentication failed')) {
+      console.error("Error saving route to server:", error);
+
+      if (error.message?.includes("Authentication failed")) {
         Alert.alert(
-          "Authentication Required", 
+          "Authentication Required",
           "Please login again to save routes.",
           [
             {
               text: "Login",
-              onPress: () => setIsAuthenticated(false)
+              onPress: () => setIsAuthenticated(false),
             },
             {
               text: "Cancel",
-              style: "cancel"
-            }
-          ]
+              style: "cancel",
+            },
+          ],
         );
       } else {
         Alert.alert(
-          "Error", 
-          error.message || "Failed to save route to server. Please try again."
+          "Error",
+          error.message || "Failed to save route to server. Please try again.",
         );
       }
     } finally {
-      setLoadingRoutes(prev => ({ ...prev, [route.id]: false }));
+      setLoadingRoutes((prev) => ({ ...prev, [route.id]: false }));
     }
   };
 
@@ -184,7 +179,7 @@ const checkDownRouteStatus = (routes) => {
       [
         {
           text: "Cancel",
-          style: "cancel"
+          style: "cancel",
         },
         {
           text: "Delete",
@@ -193,20 +188,20 @@ const checkDownRouteStatus = (routes) => {
             try {
               // Delete from local storage
               await deleteRoute(route.id);
-              
+
               // Optionally delete from server
               // if (route.server_id) {
               //   await deleteRouteFromServer(route.server_id);
               // }
-              
+
               await loadSavedRoutes();
               Alert.alert("Success", "Route deleted successfully!");
             } catch (error) {
               Alert.alert("Error", "Failed to delete route.");
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -222,7 +217,7 @@ const checkDownRouteStatus = (routes) => {
       [
         {
           text: "Cancel",
-          style: "cancel"
+          style: "cancel",
         },
         {
           text: "Delete All",
@@ -235,9 +230,9 @@ const checkDownRouteStatus = (routes) => {
             } catch (error) {
               Alert.alert("Error", "Failed to delete routes.");
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -245,15 +240,15 @@ const checkDownRouteStatus = (routes) => {
     navigation.navigate("Map", {
       routeId: route.id,
       mode: "different",
-      direction: "DOWN"
+      direction: "DOWN",
     });
   };
 
   const handleEditRoute = (route) => {
     navigation.navigate("Map", {
       editRoute: route,
-      mode: route.same_path === false ? 'different' : 'same',
-      direction: route.direction || 'UP'
+      mode: route.same_path === false ? "different" : "same",
+      direction: route.direction || "UP",
     });
   };
 
@@ -267,23 +262,32 @@ const checkDownRouteStatus = (routes) => {
     const isDownRoute = direction === "DOWN";
     const hasDownRouteCreated = downRouteStatus[route.id] === true;
 
-
-    
     return (
-      <View style={[styles.routeCard, { backgroundColor: Colours.card, borderColor: Colours.border }]}>
+      <View
+        style={[
+          styles.routeCard,
+          { backgroundColor: Colours.card, borderColor: Colours.border },
+        ]}
+      >
         {/* Path Type Indicator - UPDATED */}
-        <View style={[
-          styles.pathTypeIndicator,
-          isSamePath ? styles.samePathIndicator : styles.differentPathIndicator
-        ]}>
+        <View
+          style={[
+            styles.pathTypeIndicator,
+            isSamePath
+              ? styles.samePathIndicator
+              : styles.differentPathIndicator,
+          ]}
+        >
           <Text style={styles.pathTypeText}>
             {isSamePath ? "SAME PATH" : "DIFFERENT PATH"}
           </Text>
           {!isSamePath && route.linked_route_id && isDownRoute && (
-            <Text style={styles.linkedRouteText}>Linked to: {route.linked_route_id}</Text>
+            <Text style={styles.linkedRouteText}>
+              Linked to: {route.linked_route_id}
+            </Text>
           )}
         </View>
-        
+
         <View style={styles.mapContainer}>
           <MapView
             style={styles.miniMap}
@@ -293,23 +297,30 @@ const checkDownRouteStatus = (routes) => {
             pitchEnabled={false}
             rotateEnabled={false}
           >
-            {route.stops && route.stops.map((stop, idx) => (
-              <Marker
-                key={idx}
-                coordinate={{ 
-                  latitude: parseFloat(stop.lat), 
-                  longitude: parseFloat(stop.lon) 
-                }}
-                pinColor={stop.is_stop ? Colours.primary : Colours.secondary}
-              />
-            ))}
+            {route.stops &&
+              route.stops.map((stop, idx) => (
+                <Marker
+                  key={idx}
+                  coordinate={{
+                    latitude: parseFloat(stop.lat),
+                    longitude: parseFloat(stop.lon),
+                  }}
+                  pinColor={stop.is_stop ? Colours.primary : Colours.secondary}
+                />
+              ))}
             {route.stops && route.stops.length > 1 && (
               <Polyline
-                coordinates={route.stops.map(stop => ({
+                coordinates={route.stops.map((stop) => ({
                   latitude: parseFloat(stop.lat),
-                  longitude: parseFloat(stop.lon)
+                  longitude: parseFloat(stop.lon),
                 }))}
-                strokeColor={isSamePath ? Colours.primary : isUpRoute ? Colours.success : Colours.info}
+                strokeColor={
+                  isSamePath
+                    ? Colours.primary
+                    : isUpRoute
+                      ? Colours.success
+                      : Colours.info
+                }
                 strokeWidth={3}
               />
             )}
@@ -320,72 +331,106 @@ const checkDownRouteStatus = (routes) => {
           <View style={styles.routeHeader}>
             <View style={styles.routeNames}>
               <Text style={[styles.routeName, { color: Colours.textDark }]}>
-                {isSamePath ? `${route.up_route_name} / ${route.down_route_name}` : 
-                 route.route_name || route.up_route_name}
+                {isSamePath
+                  ? `${route.up_route_name} / ${route.down_route_name}`
+                  : route.route_name || route.up_route_name}
               </Text>
-              
-              <Text style={[styles.routeDirection, { color: Colours.textSecondary }]}>
+
+              <Text
+                style={[
+                  styles.routeDirection,
+                  { color: Colours.textSecondary },
+                ]}
+              >
                 {isSamePath ? (
                   <>
-                    <Text>↑ {route.src} → {route.dest}</Text>
-                    {'\n'}
-                    <Text>↓ {route.dest} → {route.src}</Text>
+                    <Text>
+                      ↑ {route.src} → {route.dest}
+                    </Text>
+                    {"\n"}
+                    <Text>
+                      ↓ {route.dest} → {route.src}
+                    </Text>
                   </>
                 ) : (
                   <>
-                    <Text>{isUpRoute ? '↑ UP: ' : '↓ DOWN: '} {route.src} → {route.dest}</Text>
-                    
+                    <Text>
+                      {isUpRoute ? "↑ UP: " : "↓ DOWN: "} {route.src} →{" "}
+                      {route.dest}
+                    </Text>
                   </>
                 )}
               </Text>
             </View>
             <View style={styles.cardActions}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.iconButton, styles.deleteButton]}
                 onPress={() => handleDeleteRoute(route)}
               >
-                <Ionicons name="trash-outline" size={18} color={Colours.danger} />
+                <Ionicons
+                  name="trash-outline"
+                  size={18}
+                  color={Colours.danger}
+                />
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.routeDetails}>
             <View style={styles.detailItem}>
-              <Ionicons name="location-outline" size={14} color={Colours.textSecondary} />
-              <Text style={[styles.detailText, { color: Colours.textSecondary }]}>
+              <Ionicons
+                name="location-outline"
+                size={14}
+                color={Colours.textSecondary}
+              />
+              <Text
+                style={[styles.detailText, { color: Colours.textSecondary }]}
+              >
                 {route.stops?.length || 0} stops
               </Text>
             </View>
-            
+
             {isSamePath && route.down_departure_time && (
               <View style={styles.detailItem}>
-                <Ionicons name="time-outline" size={14} color={Colours.textSecondary} />
-                <Text style={[styles.detailText, { color: Colours.textSecondary }]}>
+                <Ionicons
+                  name="time-outline"
+                  size={14}
+                  color={Colours.textSecondary}
+                />
+                <Text
+                  style={[styles.detailText, { color: Colours.textSecondary }]}
+                >
                   Depart: {route.down_departure_time}
                 </Text>
               </View>
             )}
-            
+
             {/* Route Direction Badge for Different Path */}
             {!isSamePath && (
-              <View style={[
-                styles.directionBadge,
-                isUpRoute ? styles.upDirectionBadge : styles.downDirectionBadge
-              ]}>
+              <View
+                style={[
+                  styles.directionBadge,
+                  isUpRoute
+                    ? styles.upDirectionBadge
+                    : styles.downDirectionBadge,
+                ]}
+              >
                 <Text style={styles.directionBadgeText}>
                   {isUpRoute ? "UP ROUTE" : "DOWN ROUTE"}
                 </Text>
               </View>
             )}
           </View>
-          
+
           <View style={styles.actionButtonsRow}>
             {/* Save to Server Button */}
-            <TouchableOpacity 
+            {/* Save to Server Button - ONLY FOR SAME PATH */}
+          {isSamePath && (
+            <TouchableOpacity
               style={[
-                styles.actionButton, 
+                styles.actionButton,
                 styles.saveButton,
-                isLoading && styles.buttonDisabled
+                isLoading && styles.buttonDisabled,
               ]}
               onPress={() => handleSaveToServer(route)}
               disabled={isLoading}
@@ -394,30 +439,35 @@ const checkDownRouteStatus = (routes) => {
                 <ActivityIndicator size="small" color="white" />
               ) : (
                 <>
-                  <Ionicons name="cloud-upload-outline" size={16} color="white" />
+                  <Ionicons
+                    name="cloud-upload-outline"
+                    size={16}
+                    color="white"
+                  />
                   <Text style={styles.actionButtonText}>Send to Server</Text>
                 </>
               )}
             </TouchableOpacity>
+          )}
+
 
             {/* Mark Down Route Button - UPDATED LOGIC */}
-            {!isSamePath && isUpRoute && (
-              hasDownRouteCreated ? (
+            {!isSamePath &&
+              isUpRoute &&
+              (hasDownRouteCreated ? (
                 <View style={styles.markedBadge}>
                   <Text style={styles.markedText}>MARKED</Text>
                 </View>
               ) : (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.actionButton, styles.markDownButton]}
                   onPress={() => handleMarkDownRoute(route)}
                 >
                   <Ionicons name="eye-outline" size={16} color="white" />
                   <Text style={styles.actionButtonText}>Mark Down</Text>
                 </TouchableOpacity>
-              )
-            )}
+              ))}
           </View>
-
         </View>
       </View>
     );
@@ -429,63 +479,70 @@ const checkDownRouteStatus = (routes) => {
         latitude: 9.917,
         longitude: 78.119,
         latitudeDelta: 0.2,
-        longitudeDelta: 0.2
+        longitudeDelta: 0.2,
       };
     }
 
-    const lats = stops.map(stop => parseFloat(stop.lat));
-    const lons = stops.map(stop => parseFloat(stop.lon));
-    
+    const lats = stops.map((stop) => parseFloat(stop.lat));
+    const lons = stops.map((stop) => parseFloat(stop.lon));
+
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLon = Math.min(...lons);
     const maxLon = Math.max(...lons);
-    
+
     const latitudeDelta = (maxLat - minLat) * 1.5;
     const longitudeDelta = (maxLon - minLon) * 1.5;
-    
+
     return {
       latitude: (minLat + maxLat) / 2,
       longitude: (minLon + maxLon) / 2,
       latitudeDelta: Math.max(latitudeDelta, 0.01),
-      longitudeDelta: Math.max(longitudeDelta, 0.01)
+      longitudeDelta: Math.max(longitudeDelta, 0.01),
     };
   };
 
   return (
     <View style={[styles.container, { backgroundColor: Colours.background }]}>
       {/* Header */}
-      <View style={[styles.header, { 
-        backgroundColor: Colours.card, 
-        borderBottomColor: Colours.border,
-        paddingTop: 50,
-      }]}>
-        <TouchableOpacity 
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: Colours.card,
+            borderBottomColor: Colours.border,
+            paddingTop: 50,
+          },
+        ]}
+      >
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
           <Ionicons name="arrow-back" size={24} color={Colours.primary} />
         </TouchableOpacity>
-        
+
         <Text style={[styles.headerTitle, { color: Colours.textDark }]}>
           Saved Routes ({savedRoutes.length})
         </Text>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={styles.clearAllButton}
           onPress={handleClearAllRoutes}
           disabled={savedRoutes.length === 0}
         >
-          <Ionicons 
-            name="trash-bin-outline" 
-            size={24} 
-            color={savedRoutes.length === 0 ? Colours.textSecondary : Colours.danger} 
+          <Ionicons
+            name="trash-bin-outline"
+            size={24}
+            color={
+              savedRoutes.length === 0 ? Colours.textSecondary : Colours.danger
+            }
           />
         </TouchableOpacity>
       </View>
 
       {savedRoutes.length > 0 ? (
-        <ScrollView 
+        <ScrollView
           style={styles.routesList}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.routesListContent}
@@ -503,21 +560,27 @@ const checkDownRouteStatus = (routes) => {
             <Text style={styles.filterLabel}>Showing: All Routes</Text>
             {/* You can add filter buttons here for Same Path / Different Path */}
           </View>
-          
+
           {savedRoutes.map((route, index) => (
             <RouteCard key={route.id || index} route={route} index={index} />
           ))}
         </ScrollView>
       ) : (
         <View style={styles.emptyState}>
-          <Ionicons name="map-outline" size={64} color={Colours.textSecondary} />
+          <Ionicons
+            name="map-outline"
+            size={64}
+            color={Colours.textSecondary}
+          />
           <Text style={[styles.emptyStateText, { color: Colours.textDark }]}>
             No saved routes yet
           </Text>
-          <Text style={[styles.emptyStateSubtext, { color: Colours.textSecondary }]}>
+          <Text
+            style={[styles.emptyStateSubtext, { color: Colours.textSecondary }]}
+          >
             Create your first route in the Map screen
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.goToMapButton, { backgroundColor: Colours.primary }]}
             onPress={() => navigation.navigate("Map")}
           >
@@ -527,26 +590,8 @@ const checkDownRouteStatus = (routes) => {
         </View>
       )}
 
-      {/* Logout Button */}
-      <TouchableOpacity 
-        style={[styles.logoutButton, { backgroundColor: Colours.danger }]}
-        onPress={() => {
-          Alert.alert(
-            "Logout",
-            "Are you sure you want to logout?",
-            [
-              { text: "Cancel", style: "cancel" },
-              { 
-                text: "Logout", 
-                style: "destructive",
-                onPress: () => setIsAuthenticated(false)
-              }
-            ]
-          );
-        }}
-      >
-        <Ionicons name="log-out-outline" size={24} color="white" />
-      </TouchableOpacity>
+    
+     
     </View>
   );
 }
@@ -594,7 +639,7 @@ const styles = StyleSheet.create({
   filterLabel: {
     fontSize: 14,
     color: Colours.textSecondary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   routesList: {
     flex: 1,
@@ -620,26 +665,26 @@ const styles = StyleSheet.create({
   pathTypeIndicator: {
     paddingVertical: 6,
     paddingHorizontal: 12,
-    alignItems: 'center',
+    alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: "rgba(0,0,0,0.1)",
   },
   samePathIndicator: {
-    backgroundColor: Colours.warning + '20', // Light yellow
+    backgroundColor: Colours.warning + "20", // Light yellow
   },
   differentPathIndicator: {
-    backgroundColor: Colours.info + '20', // Light blue
+    backgroundColor: Colours.info + "20", // Light blue
   },
   pathTypeText: {
     fontSize: 11,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: Colours.textDark,
-    textAlign: 'center',
+    textAlign: "center",
   },
   linkedRouteText: {
     fontSize: 9,
     color: Colours.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 2,
   },
   mapContainer: {
@@ -675,7 +720,7 @@ const styles = StyleSheet.create({
   linkedInfo: {
     fontSize: 10,
     color: Colours.info,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   cardActions: {
     flexDirection: "row",
@@ -689,10 +734,10 @@ const styles = StyleSheet.create({
     borderColor: Colours.border,
   },
   editButton: {
-    backgroundColor: Colours.success + '10',
+    backgroundColor: Colours.success + "10",
   },
   deleteButton: {
-    backgroundColor: Colours.danger + '10',
+    backgroundColor: Colours.danger + "10",
   },
   routeDetails: {
     flexDirection: "row",
@@ -715,31 +760,31 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   upDirectionBadge: {
-    backgroundColor: Colours.success + '20',
+    backgroundColor: Colours.success + "20",
     borderColor: Colours.success,
     borderWidth: 1,
   },
   downDirectionBadge: {
-    backgroundColor: Colours.info + '20',
+    backgroundColor: Colours.info + "20",
     borderColor: Colours.info,
     borderWidth: 1,
   },
   directionBadgeText: {
     fontSize: 10,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: Colours.textDark,
   },
   actionButtonsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     marginTop: 8,
-    alignItems: 'center',
+    alignItems: "center",
   },
   actionButton: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
@@ -755,22 +800,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#FF7A18", // Orange color
   },
   actionButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   markedBadge: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 6,
-    backgroundColor: '#FFA500', // Orange
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#FFA500", // Orange
+    alignItems: "center",
+    justifyContent: "center",
   },
   markedText: {
-    color: 'white',
+    color: "white",
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   emptyState: {
     flex: 1,
@@ -791,9 +836,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   goToMapButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 25,
@@ -804,23 +849,4 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
-  logoutButton: {
-    position: "absolute",
-    bottom: 80,
-    right: 20,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
-    elevation: 8,
-  },
 });
-
